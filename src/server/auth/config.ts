@@ -71,12 +71,12 @@ export const authConfig = {
   },
   // Streamlined logging output
   logger: {
-    error(code, metadata) {
-      console.error(`[Auth Error] ${code}`, metadata?.error?.message ?? "");
+    error(error) {
+      console.error(`[Auth Error]`, error.message ?? String(error));
     },
     warn(code) {
       // Only output warnings when necessary
-      if (code === "NO_SECRET") {
+      if (String(code) === "NO_SECRET") {
         console.warn(`[Auth Warn] ${code}`);
       }
     },
