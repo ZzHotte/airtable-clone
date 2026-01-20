@@ -4,8 +4,11 @@ import { TRPCReactProvider } from "~/trpc/react";
 import { NextAuthSessionProvider } from "./_components/session-provider";
 
 export const metadata = {
-  title: "Airtable Clone",
+  title: "Airtable",
   description: "A modern database interface",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export const viewport = {

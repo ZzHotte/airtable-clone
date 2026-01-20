@@ -1,12 +1,117 @@
 "use client";
 
 import { signIn } from "next-auth/react";
+import { useEffect, useRef } from "react";
 
 export function GoogleSignInButton() {
+  const originalFaviconRef = useRef<string | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const animationStartRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    // Store original favicon
+    const favicon = document.querySelector('link[rel="icon"]') as HTMLLinkElement;
+    if (favicon) {
+      originalFaviconRef.current = favicon.href;
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      restoreFavicon();
+    };
+  }, []);
+
+  const drawSpinner = (canvas: HTMLCanvasElement, rotation: number) => {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const size = 32;
+    const center = size / 2;
+    const radius = 12;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, size, size);
+
+    // Draw rotating spinner
+    ctx.strokeStyle = "#011435";
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+
+    ctx.beginPath();
+    ctx.arc(
+      center,
+      center,
+      radius,
+      rotation,
+      rotation + Math.PI * 1.5,
+      false
+    );
+    ctx.stroke();
+  };
+
+  const setLoadingFavicon = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 32;
+    canvas.height = 32;
+    
+    animationStartRef.current = performance.now();
+
+    const animate = (timestamp: number) => {
+      if (!animationStartRef.current) {
+        animationStartRef.current = timestamp;
+      }
+      
+      const elapsed = timestamp - animationStartRef.current;
+      const rotation = (elapsed / 1000) * Math.PI * 2; // Rotate once per second
+
+      drawSpinner(canvas, rotation);
+
+      // Update favicon
+      let favicon = document.querySelector('link[rel="icon"]') as HTMLLinkElement;
+      if (!favicon) {
+        favicon = document.createElement("link");
+        favicon.rel = "icon";
+        document.head.appendChild(favicon);
+      }
+      favicon.href = canvas.toDataURL();
+
+      animationFrameRef.current = requestAnimationFrame(animate);
+    };
+
+    animationFrameRef.current = requestAnimationFrame(animate);
+  };
+
+  const restoreFavicon = () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+      animationStartRef.current = null;
+    }
+
+    if (originalFaviconRef.current) {
+      let favicon = document.querySelector('link[rel="icon"]') as HTMLLinkElement;
+      if (favicon) {
+        favicon.href = originalFaviconRef.current;
+      }
+    }
+  };
+
   const handleGoogleSignIn = async () => {
-    await signIn("google", {
-      callbackUrl: "/dashboard", // Redirect to dashboard after successful sign-in
-    });
+    // Set loading favicon immediately
+    setLoadingFavicon();
+    
+    try {
+      await signIn("google", {
+        callbackUrl: "/dashboard", // Redirect to dashboard after successful sign-in
+      });
+      // Note: The page will redirect, so animation will stop automatically
+    } catch (error) {
+      // Restore favicon if sign-in fails
+      restoreFavicon();
+    }
   };
 
   return (
