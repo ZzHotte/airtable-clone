@@ -17,6 +17,13 @@ const config = {
   //   locales: ["en"],
   //   defaultLocale: "en",
   // },
+
+  // 减少日志噪音
+  logging: {
+    fetches: {
+      fullUrl: false, // 不显示完整 URL
+    },
+  },
 };
 
 export default config;
