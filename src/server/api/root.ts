@@ -14,6 +14,7 @@
 
 import { createTRPCRouter } from "~/server/api/trpc";
 import { workspaceRouter } from "~/server/api/routers/workspace";
+import { baseRouter } from "~/server/api/routers/base";
 
 /**
  * This is the primary router for your server.
@@ -22,6 +23,7 @@ import { workspaceRouter } from "~/server/api/routers/workspace";
  */
 export const appRouter = createTRPCRouter({
   workspace: workspaceRouter,
+  base: baseRouter,
 });
 
 // Export type router type signature, NOT the router itself.

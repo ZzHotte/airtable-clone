@@ -9,6 +9,7 @@ import { useWorkspaceForm } from "~/hooks/use-workspace-form";
 import { useWorkspaceById, useWorkspace } from "~/hooks/use-workspace";
 import { isValidWorkspaceId } from "~/utils/workspace-id-validator";
 import { generateBaseId } from "~/utils/base-id-generator";
+import { formatRelativeTime } from "~/utils/format-time";
 
 export default function WorkspacePage() {
   const { data: session, status } = useSession();
@@ -341,6 +342,22 @@ export default function WorkspacePage() {
                 </button>
               </div>
 
+              {/* Create button */}
+              <button
+                type="button"
+                onClick={() => {
+                  const newBaseId = generateBaseId();
+                  router.push(`/base/${newBaseId}?workspaceId=${workspaceId}`);
+                }}
+                className="px-4 py-2 text-sm font-medium text-white bg-[rgb(27,97,201)] rounded-md hover:bg-[rgb(13,82,172)] transition-colors"
+                style={{
+                  fontFamily:
+                    '"HaasText", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif',
+                }}
+              >
+                Create
+              </button>
+
               {/* Share button */}
               <button
                 type="button"
@@ -511,41 +528,122 @@ export default function WorkspacePage() {
           {/* Main Content */}
           <div className="flex-1 overflow-auto">
             <div className="max-w-4xl mx-auto px-6 py-8">
-              {/* Empty Workspace Message */}
-              <div className="text-center py-16">
-                <p
-                  className="text-lg font-semibold text-[#011435] mb-2"
-                  style={{
-                    fontFamily:
-                      '"HaasText", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif',
-                  }}
-                >
-                  This workspace is empty
-                </p>
-                <p
-                  className="text-sm text-gray-600 mb-6"
-                  style={{
-                    fontFamily:
-                      '"HaasText", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif',
-                  }}
-                >
-                  Apps in this workspace will appear here.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const newBaseId = generateBaseId();
-                    router.push(`/base/${newBaseId}`);
-                  }}
-                  className="px-4 py-2 text-sm font-medium text-white bg-[rgb(27,97,201)] rounded-md hover:bg-[rgb(13,82,172)] transition-colors"
-                  style={{
-                    fontFamily:
-                      '"HaasText", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif',
-                  }}
-                >
-                  Create
-                </button>
-              </div>
+              {/* Bases List or Empty State */}
+              {workspace?.bases && workspace.bases.length > 0 ? (
+                /* Bases Horizontal List View */
+                <div className="flex flex-wrap gap-4">
+                  {workspace.bases.map((base, index) => {
+                    const baseInitials = base.name
+                      .split(" ")
+                      .map((word) => word[0])
+                      .join("")
+                      .toUpperCase()
+                      .slice(0, 2) || "Un";
+                    const bgColors = [
+                      "bg-gray-600",
+                      "bg-blue-500",
+                      "bg-green-500",
+                      "bg-purple-500",
+                      "bg-orange-500",
+                      "bg-pink-500",
+                      "bg-red-500",
+                      "bg-indigo-500",
+                      "bg-teal-500",
+                      "bg-yellow-500",
+                    ];
+                    // Use index to ensure different colors for each base
+                    const bgColor = bgColors[index % bgColors.length];
+
+                    return (
+                      <a
+                        key={base.id}
+                        href={`/base/${base.id}?workspaceId=${workspaceId}`}
+                        className="flex items-start gap-3 p-4 border border-gray-200 rounded-lg hover:border-gray-300 hover:shadow-sm cursor-pointer transition-all min-w-[280px] no-underline"
+                        onClick={(e) => {
+                          // Allow default behavior for Ctrl/Cmd+click, middle click, etc.
+                          // Only prevent default for regular left click to use router.push for client-side navigation
+                          if (!e.ctrlKey && !e.metaKey && e.button === 0) {
+                            e.preventDefault();
+                            router.push(`/base/${base.id}?workspaceId=${workspaceId}`);
+                          }
+                        }}
+                        onMouseDown={(e) => {
+                          // Handle middle mouse button (button 1)
+                          if (e.button === 1) {
+                            e.preventDefault();
+                            window.open(`/base/${base.id}?workspaceId=${workspaceId}`, '_blank');
+                          }
+                        }}
+                      >
+                        {/* Base Icon */}
+                        <div
+                          className={`w-12 h-12 ${bgColor} rounded-lg flex items-center justify-center text-white text-sm font-semibold flex-shrink-0`}
+                        >
+                          {baseInitials}
+                        </div>
+
+                        {/* Base Info */}
+                        <div className="flex-1 min-w-0">
+                          <h3
+                            className="text-sm font-medium text-[#011435] mb-1 truncate"
+                            style={{
+                              fontFamily:
+                                '"HaasText", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif',
+                            }}
+                          >
+                            {base.name}
+                          </h3>
+                          <p
+                            className="text-xs text-gray-500"
+                            style={{
+                              fontFamily:
+                                '"HaasText", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif',
+                            }}
+                          >
+                            {formatRelativeTime(new Date(base.updatedAt))}
+                          </p>
+                        </div>
+                      </a>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* Empty Workspace Message */
+                <div className="text-center py-16">
+                  <p
+                    className="text-lg font-semibold text-[#011435] mb-2"
+                    style={{
+                      fontFamily:
+                        '"HaasText", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif',
+                    }}
+                  >
+                    This workspace is empty
+                  </p>
+                  <p
+                    className="text-sm text-gray-600 mb-6"
+                    style={{
+                      fontFamily:
+                        '"HaasText", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif',
+                    }}
+                  >
+                    Apps in this workspace will appear here.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newBaseId = generateBaseId();
+                      router.push(`/base/${newBaseId}?workspaceId=${workspaceId}`);
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-white bg-[rgb(27,97,201)] rounded-md hover:bg-[rgb(13,82,172)] transition-colors"
+                    style={{
+                      fontFamily:
+                        '"HaasText", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif',
+                    }}
+                  >
+                    Create
+                  </button>
+                </div>
+              )}
 
               {/* Workspace Collaborators Section */}
               <div className="mt-8 border-t border-gray-200 pt-6">

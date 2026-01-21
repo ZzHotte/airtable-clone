@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   useReactTable,
@@ -14,6 +14,7 @@ import {
 import { LeftBar } from "../left-bar";
 import { BaseTopBar } from "../top-bar";
 import { TableSpaces } from "../table-spaces";
+import { api } from "~/trpc/react";
 
 // Define data type for table rows
 type TableRow = {
@@ -26,12 +27,18 @@ export default function BasePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const baseId = params?.id as string;
+  const workspaceId = searchParams?.get("workspaceId") as string | null;
   const [data, setData] = useState<TableRow[]>([
     { id: "1", name: "", number: "" },
     { id: "2", name: "", number: "" },
     { id: "3", name: "", number: "" },
   ]);
+
+  // Create base mutation
+  const createBase = api.base.create.useMutation();
+  const [hasCreatedBase, setHasCreatedBase] = useState(false);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -39,6 +46,34 @@ export default function BasePage() {
       router.push("/");
     }
   }, [status, router]);
+
+  // Auto-create base when page loads (only once)
+  useEffect(() => {
+    if (
+      status === "authenticated" &&
+      baseId &&
+      workspaceId &&
+      !createBase.isPending &&
+      !hasCreatedBase
+    ) {
+      const checkAndCreateBase = async () => {
+        try {
+          await createBase.mutateAsync({
+            id: baseId,
+            workspaceId: workspaceId,
+            name: "Untitled Base",
+          });
+          setHasCreatedBase(true);
+        } catch (error) {
+          // Base might already exist, which is fine
+          console.error("Error creating base:", error);
+          setHasCreatedBase(true); // Mark as attempted even on error
+        }
+      };
+
+      void checkAndCreateBase();
+    }
+  }, [status, baseId, workspaceId, createBase, hasCreatedBase]);
 
   // Define columns
   const columns = useMemo<ColumnDef<TableRow>[]>(
