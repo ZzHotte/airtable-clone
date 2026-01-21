@@ -186,7 +186,7 @@ export default function WorkspacePage() {
                           '"HaasText", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif',
                       }}
                     >
-                      {workspace?.name || "Workspace 2"}
+                      {(workspace as { name?: string } | null | undefined)?.name ?? "Workspace 2"}
                     </h1>
                   ) : form.isEditing ? (
                     <input

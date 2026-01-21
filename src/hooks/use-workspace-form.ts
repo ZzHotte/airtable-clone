@@ -111,7 +111,9 @@ export function useWorkspaceForm({
         },
         onError: (error) => {
           console.error("Failed to save workspace:", error);
-          onError?.(error);
+          // Convert TRPCClientError to Error for onError callback
+          const errorObj = error instanceof Error ? error : new Error(error.message ?? "Unknown error");
+          onError?.(errorObj);
         },
       }
     );

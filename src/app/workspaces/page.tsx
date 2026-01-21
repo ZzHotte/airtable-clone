@@ -270,7 +270,7 @@ export default function WorkspacesPage() {
                           >
                             Share
                           </button>
-                          <div className="relative" ref={(el) => (menuRefs.current[workspace.id] = el)}>
+                          <div className="relative" ref={(el) => { menuRefs.current[workspace.id] = el; }}>
                             <button
                               type="button"
                               onClick={(e) => {
