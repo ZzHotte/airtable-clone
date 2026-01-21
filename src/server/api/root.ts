@@ -13,13 +13,16 @@
  */
 
 import { createTRPCRouter } from "~/server/api/trpc";
+import { workspaceRouter } from "~/server/api/routers/workspace";
 
 /**
  * This is the primary router for your server.
  *
  * All routers added in /api/routers should be manually added here.
  */
-export const appRouter = createTRPCRouter({});
+export const appRouter = createTRPCRouter({
+  workspace: workspaceRouter,
+});
 
 // Export type router type signature, NOT the router itself.
 // This is used by the client-side tRPC hooks to infer the types.

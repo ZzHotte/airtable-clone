@@ -161,6 +161,7 @@ exports.Prisma.UserScalarFieldEnum = {
 exports.Prisma.WorkspaceScalarFieldEnum = {
   id: 'id',
   name: 'name',
+  description: 'description',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
   ownerId: 'ownerId'
