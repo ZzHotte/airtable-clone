@@ -8,6 +8,7 @@ import { LeftSidebar } from "../../_components/left-sidebar";
 import { useWorkspaceForm } from "~/hooks/use-workspace-form";
 import { useWorkspaceById, useWorkspace } from "~/hooks/use-workspace";
 import { isValidWorkspaceId } from "~/utils/workspace-id-validator";
+import { generateBaseId } from "~/utils/base-id-generator";
 
 export default function WorkspacePage() {
   const { data: session, status } = useSession();
@@ -532,6 +533,10 @@ export default function WorkspacePage() {
                 </p>
                 <button
                   type="button"
+                  onClick={() => {
+                    const newBaseId = generateBaseId();
+                    router.push(`/base/${newBaseId}`);
+                  }}
                   className="px-4 py-2 text-sm font-medium text-white bg-[rgb(27,97,201)] rounded-md hover:bg-[rgb(13,82,172)] transition-colors"
                   style={{
                     fontFamily:
