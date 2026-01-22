@@ -30,7 +30,7 @@ export const baseRouter = createTRPCRouter({
         },
         include: {
           workspace: true,
-          tables: {
+          dataTables: {
             orderBy: {
               updatedAt: "desc",
             },

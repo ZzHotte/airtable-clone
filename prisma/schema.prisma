@@ -64,7 +64,8 @@ model User {
   accounts Account[]
   sessions Session[]
 
-  workspaces Workspace[]
+  workspaces       Workspace[]
+  workspaceMembers WorkspaceMember[]
 }
 
 // =======================
@@ -80,9 +81,29 @@ model Workspace {
   ownerId String
   owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
-  bases Base[]
+  bases   Base[]
+  members WorkspaceMember[]
 
   @@index([ownerId])
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole
+  createdAt   DateTime      @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+enum WorkspaceRole {
+  owner
+  member
 }
 
 model Base {
@@ -94,12 +115,12 @@ model Base {
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  tables Table[]
+  dataTables DataTable[]
 
   @@index([workspaceId])
 }
 
-model Table {
+model DataTable {
   id        String   @id @default(cuid())
   name      String
   createdAt DateTime @default(now())
@@ -108,5 +129,65 @@ model Table {
   baseId String
   base   Base   @relation(fields: [baseId], references: [id], onDelete: Cascade)
 
+  columns TableColumn[]
+  rows    TableRow[]
+  views   TableView[]
+
   @@index([baseId])
+}
+
+model TableColumn {
+  id      String    @id @default(cuid())
+  tableId String
+  table   DataTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  // 给列一个稳定的 key（不要用 name 当 key）
+  key   String // e.g. "col_k9s8d2"
+  name  String
+  type  ColumnType
+  order Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tableId, key])
+  @@index([tableId, order])
+}
+
+enum ColumnType {
+  text
+  number
+}
+
+model TableRow {
+  id      String    @id @default(cuid())
+  tableId String
+  table   DataTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  // 关键：JSONB 存整行
+  data Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tableId, createdAt])
+}
+
+model TableView {
+  id      String    @id @default(cuid())
+  tableId String
+  table   DataTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  name String
+
+  // view 配置（你要求：filters/sort/search/hide columns）
+  filters           Json
+  sort              Json
+  search            String?
+  visibleColumnKeys String[] // 或者 Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tableId])
 }

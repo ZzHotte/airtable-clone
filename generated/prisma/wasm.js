@@ -139,6 +139,14 @@ exports.Prisma.WorkspaceScalarFieldEnum = {
   ownerId: 'ownerId'
 };
 
+exports.Prisma.WorkspaceMemberScalarFieldEnum = {
+  id: 'id',
+  workspaceId: 'workspaceId',
+  userId: 'userId',
+  role: 'role',
+  createdAt: 'createdAt'
+};
+
 exports.Prisma.BaseScalarFieldEnum = {
   id: 'id',
   name: 'name',
@@ -147,7 +155,7 @@ exports.Prisma.BaseScalarFieldEnum = {
   workspaceId: 'workspaceId'
 };
 
-exports.Prisma.TableScalarFieldEnum = {
+exports.Prisma.DataTableScalarFieldEnum = {
   id: 'id',
   name: 'name',
   createdAt: 'createdAt',
@@ -155,9 +163,44 @@ exports.Prisma.TableScalarFieldEnum = {
   baseId: 'baseId'
 };
 
+exports.Prisma.TableColumnScalarFieldEnum = {
+  id: 'id',
+  tableId: 'tableId',
+  key: 'key',
+  name: 'name',
+  type: 'type',
+  order: 'order',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.TableRowScalarFieldEnum = {
+  id: 'id',
+  tableId: 'tableId',
+  data: 'data',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.TableViewScalarFieldEnum = {
+  id: 'id',
+  tableId: 'tableId',
+  name: 'name',
+  filters: 'filters',
+  sort: 'sort',
+  search: 'search',
+  visibleColumnKeys: 'visibleColumnKeys',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
+};
+
+exports.Prisma.JsonNullValueInput = {
+  JsonNull: Prisma.JsonNull
 };
 
 exports.Prisma.QueryMode = {
@@ -170,6 +213,20 @@ exports.Prisma.NullsOrder = {
   last: 'last'
 };
 
+exports.Prisma.JsonNullValueFilter = {
+  DbNull: Prisma.DbNull,
+  JsonNull: Prisma.JsonNull,
+  AnyNull: Prisma.AnyNull
+};
+exports.WorkspaceRole = exports.$Enums.WorkspaceRole = {
+  owner: 'owner',
+  member: 'member'
+};
+
+exports.ColumnType = exports.$Enums.ColumnType = {
+  text: 'text',
+  number: 'number'
+};
 
 exports.Prisma.ModelName = {
   Account: 'Account',
@@ -177,8 +234,12 @@ exports.Prisma.ModelName = {
   VerificationToken: 'VerificationToken',
   User: 'User',
   Workspace: 'Workspace',
+  WorkspaceMember: 'WorkspaceMember',
   Base: 'Base',
-  Table: 'Table'
+  DataTable: 'DataTable',
+  TableColumn: 'TableColumn',
+  TableRow: 'TableRow',
+  TableView: 'TableView'
 };
 /**
  * Create the Client
@@ -219,7 +280,6 @@ const config = {
     "db"
   ],
   "activeProvider": "postgresql",
-  "postinstall": false,
   "inlineDatasources": {
     "db": {
       "url": {
@@ -228,13 +288,13 @@ const config = {
       }
     }
   },
-  "inlineSchema": "// =======================\n// Prisma generator & DB\n// =======================\ngenerator client {\n  provider = \"prisma-client-js\"\n  output   = \"../generated/prisma\"\n}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n\n// =======================\n// NextAuth required models\n// =======================\nmodel Account {\n  id                       String  @id @default(cuid())\n  userId                   String\n  type                     String\n  provider                 String\n  providerAccountId        String\n  refresh_token            String?\n  access_token             String?\n  expires_at               Int?\n  token_type               String?\n  scope                    String?\n  id_token                 String?\n  session_state            String?\n  refresh_token_expires_in Int?\n\n  user User @relation(fields: [userId], references: [id], onDelete: Cascade)\n\n  @@unique([provider, providerAccountId])\n}\n\nmodel Session {\n  id           String   @id @default(cuid())\n  sessionToken String   @unique\n  userId       String\n  expires      DateTime\n\n  user User @relation(fields: [userId], references: [id], onDelete: Cascade)\n}\n\nmodel VerificationToken {\n  identifier String\n  token      String   @unique\n  expires    DateTime\n\n  @@unique([identifier, token])\n}\n\n// =======================\n// Core User model\n// =======================\nmodel User {\n  id            String    @id @default(cuid())\n  name          String?\n  email         String?   @unique\n  emailVerified DateTime?\n  image         String?\n\n  accounts Account[]\n  sessions Session[]\n\n  workspaces Workspace[]\n}\n\n// =======================\n// Airtable-like hierarchy\n// =======================\nmodel Workspace {\n  id          String   @id @default(cuid())\n  name        String\n  description String?\n  createdAt   DateTime @default(now())\n  updatedAt   DateTime @updatedAt\n\n  ownerId String\n  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)\n\n  bases Base[]\n\n  @@index([ownerId])\n}\n\nmodel Base {\n  id        String   @id @default(cuid())\n  name      String\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n\n  workspaceId String\n  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)\n\n  tables Table[]\n\n  @@index([workspaceId])\n}\n\nmodel Table {\n  id        String   @id @default(cuid())\n  name      String\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n\n  baseId String\n  base   Base   @relation(fields: [baseId], references: [id], onDelete: Cascade)\n\n  @@index([baseId])\n}\n",
-  "inlineSchemaHash": "d4b60f642d5a87b408ae76d99adf3019601a6a40cd8f15bd6e5c5b1ba5636cc5",
+  "inlineSchema": "// =======================\n// Prisma generator & DB\n// =======================\ngenerator client {\n  provider = \"prisma-client-js\"\n  output   = \"../generated/prisma\"\n}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n\n// =======================\n// NextAuth required models\n// =======================\nmodel Account {\n  id                       String  @id @default(cuid())\n  userId                   String\n  type                     String\n  provider                 String\n  providerAccountId        String\n  refresh_token            String?\n  access_token             String?\n  expires_at               Int?\n  token_type               String?\n  scope                    String?\n  id_token                 String?\n  session_state            String?\n  refresh_token_expires_in Int?\n\n  user User @relation(fields: [userId], references: [id], onDelete: Cascade)\n\n  @@unique([provider, providerAccountId])\n}\n\nmodel Session {\n  id           String   @id @default(cuid())\n  sessionToken String   @unique\n  userId       String\n  expires      DateTime\n\n  user User @relation(fields: [userId], references: [id], onDelete: Cascade)\n}\n\nmodel VerificationToken {\n  identifier String\n  token      String   @unique\n  expires    DateTime\n\n  @@unique([identifier, token])\n}\n\n// =======================\n// Core User model\n// =======================\nmodel User {\n  id            String    @id @default(cuid())\n  name          String?\n  email         String?   @unique\n  emailVerified DateTime?\n  image         String?\n\n  accounts Account[]\n  sessions Session[]\n\n  workspaces       Workspace[]\n  workspaceMembers WorkspaceMember[]\n}\n\n// =======================\n// Airtable-like hierarchy\n// =======================\nmodel Workspace {\n  id          String   @id @default(cuid())\n  name        String\n  description String?\n  createdAt   DateTime @default(now())\n  updatedAt   DateTime @updatedAt\n\n  ownerId String\n  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)\n\n  bases   Base[]\n  members WorkspaceMember[]\n\n  @@index([ownerId])\n}\n\nmodel WorkspaceMember {\n  id          String        @id @default(cuid())\n  workspaceId String\n  userId      String\n  role        WorkspaceRole\n  createdAt   DateTime      @default(now())\n\n  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)\n  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)\n\n  @@unique([workspaceId, userId])\n  @@index([userId])\n}\n\nenum WorkspaceRole {\n  owner\n  member\n}\n\nmodel Base {\n  id        String   @id @default(cuid())\n  name      String\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n\n  workspaceId String\n  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)\n\n  dataTables DataTable[]\n\n  @@index([workspaceId])\n}\n\nmodel DataTable {\n  id        String   @id @default(cuid())\n  name      String\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n\n  baseId String\n  base   Base   @relation(fields: [baseId], references: [id], onDelete: Cascade)\n\n  columns TableColumn[]\n  rows    TableRow[]\n  views   TableView[]\n\n  @@index([baseId])\n}\n\nmodel TableColumn {\n  id      String    @id @default(cuid())\n  tableId String\n  table   DataTable @relation(fields: [tableId], references: [id], onDelete: Cascade)\n\n  // 给列一个稳定的 key（不要用 name 当 key）\n  key   String // e.g. \"col_k9s8d2\"\n  name  String\n  type  ColumnType\n  order Int\n\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n\n  @@unique([tableId, key])\n  @@index([tableId, order])\n}\n\nenum ColumnType {\n  text\n  number\n}\n\nmodel TableRow {\n  id      String    @id @default(cuid())\n  tableId String\n  table   DataTable @relation(fields: [tableId], references: [id], onDelete: Cascade)\n\n  // 关键：JSONB 存整行\n  data Json\n\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n\n  @@index([tableId, createdAt])\n}\n\nmodel TableView {\n  id      String    @id @default(cuid())\n  tableId String\n  table   DataTable @relation(fields: [tableId], references: [id], onDelete: Cascade)\n\n  name String\n\n  // view 配置（你要求：filters/sort/search/hide columns）\n  filters           Json\n  sort              Json\n  search            String?\n  visibleColumnKeys String[] // 或者 Json\n\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n\n  @@index([tableId])\n}\n",
+  "inlineSchemaHash": "6222854a38449eb8b7c65a6c625f836f2ef3794ddad37b75b183ac6f98074816",
   "copyEngine": true
 }
 config.dirname = '/'
 
-config.runtimeDataModel = JSON.parse("{\"models\":{\"Account\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"userId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"type\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"provider\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"providerAccountId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"refresh_token\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"access_token\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"expires_at\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"token_type\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"scope\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"id_token\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"session_state\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"refresh_token_expires_in\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"user\",\"kind\":\"object\",\"type\":\"User\",\"relationName\":\"AccountToUser\"}],\"dbName\":null},\"Session\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"sessionToken\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"userId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"expires\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"user\",\"kind\":\"object\",\"type\":\"User\",\"relationName\":\"SessionToUser\"}],\"dbName\":null},\"VerificationToken\":{\"fields\":[{\"name\":\"identifier\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"token\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"expires\",\"kind\":\"scalar\",\"type\":\"DateTime\"}],\"dbName\":null},\"User\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"name\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"email\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"emailVerified\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"image\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"accounts\",\"kind\":\"object\",\"type\":\"Account\",\"relationName\":\"AccountToUser\"},{\"name\":\"sessions\",\"kind\":\"object\",\"type\":\"Session\",\"relationName\":\"SessionToUser\"},{\"name\":\"workspaces\",\"kind\":\"object\",\"type\":\"Workspace\",\"relationName\":\"UserToWorkspace\"}],\"dbName\":null},\"Workspace\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"name\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"description\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"updatedAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"ownerId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"owner\",\"kind\":\"object\",\"type\":\"User\",\"relationName\":\"UserToWorkspace\"},{\"name\":\"bases\",\"kind\":\"object\",\"type\":\"Base\",\"relationName\":\"BaseToWorkspace\"}],\"dbName\":null},\"Base\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"name\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"updatedAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"workspaceId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"workspace\",\"kind\":\"object\",\"type\":\"Workspace\",\"relationName\":\"BaseToWorkspace\"},{\"name\":\"tables\",\"kind\":\"object\",\"type\":\"Table\",\"relationName\":\"BaseToTable\"}],\"dbName\":null},\"Table\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"name\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"updatedAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"baseId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"base\",\"kind\":\"object\",\"type\":\"Base\",\"relationName\":\"BaseToTable\"}],\"dbName\":null}},\"enums\":{},\"types\":{}}")
+config.runtimeDataModel = JSON.parse("{\"models\":{\"Account\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"userId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"type\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"provider\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"providerAccountId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"refresh_token\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"access_token\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"expires_at\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"token_type\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"scope\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"id_token\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"session_state\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"refresh_token_expires_in\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"user\",\"kind\":\"object\",\"type\":\"User\",\"relationName\":\"AccountToUser\"}],\"dbName\":null},\"Session\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"sessionToken\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"userId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"expires\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"user\",\"kind\":\"object\",\"type\":\"User\",\"relationName\":\"SessionToUser\"}],\"dbName\":null},\"VerificationToken\":{\"fields\":[{\"name\":\"identifier\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"token\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"expires\",\"kind\":\"scalar\",\"type\":\"DateTime\"}],\"dbName\":null},\"User\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"name\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"email\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"emailVerified\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"image\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"accounts\",\"kind\":\"object\",\"type\":\"Account\",\"relationName\":\"AccountToUser\"},{\"name\":\"sessions\",\"kind\":\"object\",\"type\":\"Session\",\"relationName\":\"SessionToUser\"},{\"name\":\"workspaces\",\"kind\":\"object\",\"type\":\"Workspace\",\"relationName\":\"UserToWorkspace\"},{\"name\":\"workspaceMembers\",\"kind\":\"object\",\"type\":\"WorkspaceMember\",\"relationName\":\"UserToWorkspaceMember\"}],\"dbName\":null},\"Workspace\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"name\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"description\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"updatedAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"ownerId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"owner\",\"kind\":\"object\",\"type\":\"User\",\"relationName\":\"UserToWorkspace\"},{\"name\":\"bases\",\"kind\":\"object\",\"type\":\"Base\",\"relationName\":\"BaseToWorkspace\"},{\"name\":\"members\",\"kind\":\"object\",\"type\":\"WorkspaceMember\",\"relationName\":\"WorkspaceToWorkspaceMember\"}],\"dbName\":null},\"WorkspaceMember\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"workspaceId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"userId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"role\",\"kind\":\"enum\",\"type\":\"WorkspaceRole\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"workspace\",\"kind\":\"object\",\"type\":\"Workspace\",\"relationName\":\"WorkspaceToWorkspaceMember\"},{\"name\":\"user\",\"kind\":\"object\",\"type\":\"User\",\"relationName\":\"UserToWorkspaceMember\"}],\"dbName\":null},\"Base\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"name\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"updatedAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"workspaceId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"workspace\",\"kind\":\"object\",\"type\":\"Workspace\",\"relationName\":\"BaseToWorkspace\"},{\"name\":\"dataTables\",\"kind\":\"object\",\"type\":\"DataTable\",\"relationName\":\"BaseToDataTable\"}],\"dbName\":null},\"DataTable\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"name\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"updatedAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"baseId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"base\",\"kind\":\"object\",\"type\":\"Base\",\"relationName\":\"BaseToDataTable\"},{\"name\":\"columns\",\"kind\":\"object\",\"type\":\"TableColumn\",\"relationName\":\"DataTableToTableColumn\"},{\"name\":\"rows\",\"kind\":\"object\",\"type\":\"TableRow\",\"relationName\":\"DataTableToTableRow\"},{\"name\":\"views\",\"kind\":\"object\",\"type\":\"TableView\",\"relationName\":\"DataTableToTableView\"}],\"dbName\":null},\"TableColumn\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"tableId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"table\",\"kind\":\"object\",\"type\":\"DataTable\",\"relationName\":\"DataTableToTableColumn\"},{\"name\":\"key\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"name\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"type\",\"kind\":\"enum\",\"type\":\"ColumnType\"},{\"name\":\"order\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"updatedAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"}],\"dbName\":null},\"TableRow\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"tableId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"table\",\"kind\":\"object\",\"type\":\"DataTable\",\"relationName\":\"DataTableToTableRow\"},{\"name\":\"data\",\"kind\":\"scalar\",\"type\":\"Json\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"updatedAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"}],\"dbName\":null},\"TableView\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"tableId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"table\",\"kind\":\"object\",\"type\":\"DataTable\",\"relationName\":\"DataTableToTableView\"},{\"name\":\"name\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"filters\",\"kind\":\"scalar\",\"type\":\"Json\"},{\"name\":\"sort\",\"kind\":\"scalar\",\"type\":\"Json\"},{\"name\":\"search\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"visibleColumnKeys\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"updatedAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"}],\"dbName\":null}},\"enums\":{},\"types\":{}}")
 defineDmmfProperty(exports.Prisma, config.runtimeDataModel)
 config.engineWasm = {
   getRuntime: async () => require('./query_engine_bg.js'),

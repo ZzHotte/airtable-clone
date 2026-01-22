@@ -167,6 +167,14 @@ exports.Prisma.WorkspaceScalarFieldEnum = {
   ownerId: 'ownerId'
 };
 
+exports.Prisma.WorkspaceMemberScalarFieldEnum = {
+  id: 'id',
+  workspaceId: 'workspaceId',
+  userId: 'userId',
+  role: 'role',
+  createdAt: 'createdAt'
+};
+
 exports.Prisma.BaseScalarFieldEnum = {
   id: 'id',
   name: 'name',
@@ -175,7 +183,7 @@ exports.Prisma.BaseScalarFieldEnum = {
   workspaceId: 'workspaceId'
 };
 
-exports.Prisma.TableScalarFieldEnum = {
+exports.Prisma.DataTableScalarFieldEnum = {
   id: 'id',
   name: 'name',
   createdAt: 'createdAt',
@@ -183,9 +191,44 @@ exports.Prisma.TableScalarFieldEnum = {
   baseId: 'baseId'
 };
 
+exports.Prisma.TableColumnScalarFieldEnum = {
+  id: 'id',
+  tableId: 'tableId',
+  key: 'key',
+  name: 'name',
+  type: 'type',
+  order: 'order',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.TableRowScalarFieldEnum = {
+  id: 'id',
+  tableId: 'tableId',
+  data: 'data',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.TableViewScalarFieldEnum = {
+  id: 'id',
+  tableId: 'tableId',
+  name: 'name',
+  filters: 'filters',
+  sort: 'sort',
+  search: 'search',
+  visibleColumnKeys: 'visibleColumnKeys',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
+};
+
+exports.Prisma.JsonNullValueInput = {
+  JsonNull: Prisma.JsonNull
 };
 
 exports.Prisma.QueryMode = {
@@ -198,6 +241,20 @@ exports.Prisma.NullsOrder = {
   last: 'last'
 };
 
+exports.Prisma.JsonNullValueFilter = {
+  DbNull: Prisma.DbNull,
+  JsonNull: Prisma.JsonNull,
+  AnyNull: Prisma.AnyNull
+};
+exports.WorkspaceRole = exports.$Enums.WorkspaceRole = {
+  owner: 'owner',
+  member: 'member'
+};
+
+exports.ColumnType = exports.$Enums.ColumnType = {
+  text: 'text',
+  number: 'number'
+};
 
 exports.Prisma.ModelName = {
   Account: 'Account',
@@ -205,8 +262,12 @@ exports.Prisma.ModelName = {
   VerificationToken: 'VerificationToken',
   User: 'User',
   Workspace: 'Workspace',
+  WorkspaceMember: 'WorkspaceMember',
   Base: 'Base',
-  Table: 'Table'
+  DataTable: 'DataTable',
+  TableColumn: 'TableColumn',
+  TableRow: 'TableRow',
+  TableView: 'TableView'
 };
 
 /**
