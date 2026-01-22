@@ -32,7 +32,7 @@ export const baseRouter = createTRPCRouter({
           workspace: true,
           dataTables: {
             orderBy: {
-              updatedAt: "desc",
+              createdAt: "asc", // Order by creation time, oldest first
             },
           },
         },

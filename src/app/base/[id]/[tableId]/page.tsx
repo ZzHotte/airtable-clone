@@ -3,21 +3,23 @@
 import { useSession } from "next-auth/react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { LeftBar } from "../../left-bar";
+import { BaseTopBar } from "../../top-bar";
+import { TableSpaces } from "../../table-spaces";
 import { api } from "~/trpc/react";
-import { generateTableId } from "~/utils/table-id-generator";
 
-export default function BasePage() {
+export default function BaseTablePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
   const baseId = params?.id as string;
+  const tableId = params?.tableId as string;
   const workspaceId = searchParams?.get("workspaceId") as string | null;
 
   // Create base mutation
   const createBase = api.base.create.useMutation();
   const [hasCreatedBase, setHasCreatedBase] = useState(false);
-  const [hasRedirected, setHasRedirected] = useState(false);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -43,10 +45,22 @@ export default function BasePage() {
             name: "Untitled Base",
           });
           setHasCreatedBase(true);
+          // Remove workspaceId from URL after base is created
+          if (tableId) {
+            router.replace(`/base/${baseId}/${tableId}`);
+          } else {
+            router.replace(`/base/${baseId}`);
+          }
         } catch (error) {
           // Base might already exist, which is fine
           console.error("Error creating base:", error);
           setHasCreatedBase(true);
+          // Still remove workspaceId from URL even if base already exists
+          if (tableId) {
+            router.replace(`/base/${baseId}/${tableId}`);
+          } else {
+            router.replace(`/base/${baseId}`);
+          }
         }
       };
 
@@ -59,25 +73,10 @@ export default function BasePage() {
     ) {
       setHasCreatedBase(true);
     }
-  }, [status, baseId, workspaceId, createBase, hasCreatedBase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, baseId, workspaceId, hasCreatedBase]);
 
-  // Redirect to first table or create new table
-  useEffect(() => {
-    if (
-      status === "authenticated" &&
-      baseId &&
-      hasCreatedBase &&
-      !hasRedirected
-    ) {
-      // TODO: Query base's tables from API
-      // For now, we'll create a new table ID and redirect
-      const newTableId = generateTableId();
-      setHasRedirected(true);
-      router.replace(`/base/${baseId}/${newTableId}`);
-    }
-  }, [status, baseId, hasCreatedBase, hasRedirected, router]);
-
-  if (status === "loading" || !hasRedirected) {
+  if (status === "loading") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
         <div className="text-center">
@@ -91,5 +90,25 @@ export default function BasePage() {
     return null;
   }
 
-  return null; // This page just redirects
+  return (
+    <div className="h-screen w-full bg-white flex overflow-hidden">
+      {/* Far Left Vertical Bar */}
+      <LeftBar />
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col overflow-hidden bg-white">
+        {/* Base Page Content */}
+        <div className="flex-1 flex flex-col overflow-hidden bg-white">
+          {/* Base Header */}
+          <BaseTopBar />
+
+          {/* Table View */}
+          <TableSpaces 
+            baseId={baseId}
+            tableId={tableId}
+          />
+        </div>
+      </div>
+    </div>
+  );
 }
