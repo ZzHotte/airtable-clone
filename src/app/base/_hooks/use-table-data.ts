@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback } from "react";
 
 export type TableRow = {
   id: string;
-  [key: string]: string;
+  [key: string]: string | number | null;
 };
 
 type UseTableDataProps = {
@@ -15,9 +15,9 @@ export function useTableData({ activeTableId, externalSetData }: UseTableDataPro
 
   const currentData = useMemo(() => {
     if (activeTableId) {
-      return tableDataMap[activeTableId] || [{ id: "1", name: "", number: "" }];
+      return tableDataMap[activeTableId] || [{ id: "1", name: "", number: null }];
     }
-    return [{ id: "1", name: "", number: "" }];
+    return [{ id: "1", name: "", number: null }];
   }, [activeTableId, tableDataMap]);
 
   const handleSetData = useCallback(

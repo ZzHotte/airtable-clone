@@ -49,9 +49,7 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
 
   const { handleAddNewTab, handleTabChange } = useTableCreation({
     baseId: currentBaseId,
-    tableId: currentTableId,
     baseTables,
-    isLoadingTables,
   });
 
   const { currentData, handleSetData, handleAddRow } = useTableData({
@@ -59,26 +57,49 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
     externalSetData,
   });
 
-  const [tableColumns, setTableColumns] = useState<
-    Array<{ key: string; name: string; type: "text" | "number" }>
-  >([
-    { key: "name", name: "A Name", type: "text" },
-    { key: "number", name: "# Number", type: "number" },
-  ]);
+  const [tableColumnsMap, setTableColumnsMap] = useState<
+    Record<string, Array<{ id: string; name: string; type: "text" | "number" }>>
+  >({});
 
-  const handleAddColumn = () => {
-    const newColumnKey = `col_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const newColumn = {
-      key: newColumnKey,
-      name: `Column ${tableColumns.length + 1}`,
-      type: "text" as const,
-    };
-    setTableColumns([...tableColumns, newColumn]);
+  const currentTableColumns = useMemo((): Array<{ id: string; name: string; type: "text" | "number" }> => {
+    if (currentTableId) {
+      return tableColumnsMap[currentTableId] || [
+        { id: "name", name: "Name", type: "text" as const },
+        { id: "number", name: "Number", type: "number" as const },
+      ];
+    }
+    return [
+      { id: "name", name: "Name", type: "text" as const },
+      { id: "number", name: "Number", type: "number" as const },
+    ];
+  }, [currentTableId, tableColumnsMap]);
+
+  const handleAddColumn = (data: { name: string; type: "text" | "number"; defaultValue?: string }) => {
+    if (!currentTableId) return;
     
-    // 为所有现有行添加新列的字段
+    const newColumnId = `col_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const newColumn: { id: string; name: string; type: "text" | "number" } = {
+      id: newColumnId,
+      name: data.name || `Column ${currentTableColumns.length + 1}`,
+      type: data.type,
+    };
+    
+    setTableColumnsMap((prev) => {
+      const updated = {
+        ...prev,
+        [currentTableId]: [...currentTableColumns, newColumn],
+      } as Record<string, Array<{ id: string; name: string; type: "text" | "number" }>>;
+      return updated;
+    });
+    
+    // 根据列类型设置默认值
+    const defaultValue = data.type === "number" 
+      ? (data.defaultValue ? parseFloat(data.defaultValue) || null : null)
+      : (data.defaultValue || "");
+    
     const updatedData = currentData.map((row) => ({
       ...row,
-      [newColumnKey]: "",
+      [newColumnId]: defaultValue,
     }));
     handleSetData(updatedData);
   };
@@ -88,10 +109,9 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
       createTableColumns({
         currentData,
         onSetData: handleSetData,
-        columns: tableColumns,
-        onAddColumn: handleAddColumn,
+        columns: currentTableColumns,
       }),
-    [currentData, handleSetData, tableColumns, handleAddColumn]
+    [currentData, handleSetData, currentTableColumns]
   );
 
   const table = useReactTable({
@@ -123,9 +143,12 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
         <TableSidebar isOpen={isSidebarOpen} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <TableToolbar onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
+          <TableToolbar 
+            onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+            activeTable={availableTables.find((t) => t.id === currentTableId) || null}
+          />
 
-          <TableGrid table={table} onAddRow={handleAddRow} />
+          <TableGrid key={currentTableId} table={table} onAddRow={handleAddRow} onAddColumn={handleAddColumn} />
 
           <TableBottomBar recordCount={currentData.length} onAddRow={handleAddRow} />
         </div>

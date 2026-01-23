@@ -4,34 +4,52 @@ import type { ColumnDef } from "@tanstack/react-table";
 import type { TableRow } from "../../_hooks/use-table-data";
 import { EditableCell } from "./editable-cell";
 
-export type TableColumnConfig = {
-  key: string;
+/**
+ * ColumnSchema: 列的 Schema 定义，一旦创建后不可变
+ * - id: 列的稳定标识符
+ * - name: 列的显示名称
+ * - type: 列的类型，创建后固定，不允许修改
+ */
+export type ColumnSchema = {
+  id: string;
   name: string;
   type: "text" | "number";
 };
 
+// 为了向后兼容，保留 TableColumnConfig 作为别名
+export type TableColumnConfig = ColumnSchema;
+
 type TableColumnsProps = {
   currentData: TableRow[];
   onSetData: (data: TableRow[]) => void;
-  columns?: TableColumnConfig[];
-  onAddColumn?: () => void;
+  columns?: ColumnSchema[];
 };
 
-const defaultColumns: TableColumnConfig[] = [
-  { key: "name", name: "A Name", type: "text" },
-  { key: "number", name: "# Number", type: "number" },
+const defaultColumns: ColumnSchema[] = [
+  { id: "name", name: "Name", type: "text" },
+  { id: "number", name: "Number", type: "number" },
 ];
 
 export function createTableColumns({
   currentData,
   onSetData,
   columns = defaultColumns,
-  onAddColumn,
 }: TableColumnsProps): ColumnDef<TableRow>[] {
   const dataColumns: ColumnDef<TableRow>[] = columns.map((col) => ({
-    accessorKey: col.key,
+    accessorKey: col.id,
     header: () => (
-      <span className="text-xs text-gray-900 font-medium">{col.name}</span>
+      <div 
+        className="flex items-center gap-1"
+        style={{
+          height: "24px",
+          lineHeight: "1.5",
+        }}
+      >
+        <span className="text-xs opacity-70">
+          {col.type === "text" ? "A" : "#"}
+        </span>
+        <span className="text-xs text-gray-900 font-medium">{col.name}</span>
+      </div>
     ),
       cell: (info) => {
         const rowIndex = info.row.index;
@@ -39,17 +57,33 @@ export function createTableColumns({
         const isEditing = (info as any).isEditing ?? false;
         const onStopEditing = (info as any).onStopEditing;
         const onArrowKey = (info as any).onArrowKey;
-        const cellValue = row?.[col.key] ?? "";
+        const cellValue = row?.[col.id] ?? (col.type === "number" ? null : "");
 
         return (
           <EditableCell
             value={cellValue}
+            columnType={col.type}
             onChange={(newValue) => {
               const newData = [...currentData];
               if (newData[rowIndex]) {
+                // 根据列类型进行类型转换
+                let typedValue: string | number | null;
+                if (col.type === "number") {
+                  // number 列：存储 number 或 null
+                  if (newValue === "" || newValue === null) {
+                    typedValue = null;
+                  } else {
+                    const numValue = typeof newValue === "number" ? newValue : parseFloat(String(newValue));
+                    typedValue = isNaN(numValue) ? null : numValue;
+                  }
+                } else {
+                  // text 列：存储 string
+                  typedValue = newValue === null ? "" : String(newValue);
+                }
+                
                 newData[rowIndex] = {
                   ...newData[rowIndex],
-                  [col.key]: newValue,
+                  [col.id]: typedValue,
                 };
                 onSetData(newData);
               }
@@ -69,7 +103,13 @@ export function createTableColumns({
     {
       id: "rowNumber",
       header: () => (
-        <div className="flex items-center justify-center">
+        <div 
+          className="flex items-center justify-center"
+          style={{
+            height: "24px",
+            lineHeight: "1.5",
+          }}
+        >
           <input
             type="checkbox"
             className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
@@ -90,33 +130,5 @@ export function createTableColumns({
       enableResizing: false,
     },
     ...dataColumns,
-    {
-      id: "addColumn",
-      header: () => (
-        <div className="flex items-center justify-center">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onAddColumn?.();
-            }}
-            className="w-5 h-5 flex items-center justify-center hover:bg-blue-50 rounded text-gray-400 hover:text-blue-600 transition-colors"
-            title="Add column"
-          >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-              <path
-                d="M8 2v12M2 8h12"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-        </div>
-      ),
-      cell: () => null,
-      size: 50,
-      enableResizing: false,
-    },
   ];
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { TableTabDropdownIcon } from "./table-tab-dropdown-icon";
 
 type TableTabButtonProps = {
@@ -10,29 +11,50 @@ type TableTabButtonProps = {
 };
 
 export function TableTabButton({ tab, isActive, isFirst, onClick }: TableTabButtonProps) {
+  const [isHovered, setIsHovered] = useState(false);
+  const hoverBgColor = "#D4E8EA"; 
+  const baseBgColor = isActive ? "rgb(255, 255, 255)" : "#E3FAFD";
+  const backgroundColor = isHovered && !isActive ? hoverBgColor : baseBgColor;
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`py-1.5 text-xs relative flex items-center ${
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className={`py-1.5 text-xs relative flex items-center cursor-pointer transition-all duration-200 ${
         isActive ? "font-bold" : "font-normal"
       }`}
       style={{
         fontFamily:
           '"HaasText", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif',
-        backgroundColor: isActive ? "rgb(255, 255, 255)" : "#f2f4f8",
+        backgroundColor,
         color: isActive ? "rgb(50, 50, 50)" : "rgb(100, 100, 100)",
-        ...(isActive && !isFirst
-          ? { borderRadius: "4px 4px 0 0" }
+        ...(isActive
+          ? { 
+              borderRadius: isFirst ? "4px 4px 0 0" : "4px 4px 0 0",
+              borderBottom: "none",
+              borderLeft: isFirst ? "none" : "1px solid rgb(229, 231, 235)",
+              borderRight: "1px solid rgb(229, 231, 235)",
+            }
           : isFirst && !isActive
-          ? { borderRadius: "4px 0 0 0" }
-          : isFirst && isActive
-          ? { borderRadius: "4px 4px 0 0" }
-          : { borderRadius: "0" }),
-        borderBottom: "none",
-        boxShadow: isActive ? "0 1px 3px rgba(0, 0, 0, 0.08)" : "none",
+          ? { 
+              borderRadius: "4px 0 0 0",
+              borderBottom: "1px solid rgb(229, 231, 235)",
+              borderRight: "1px solid rgb(229, 231, 235)",
+            }
+          : { 
+              borderRadius: "0",
+              borderBottom: "1px solid rgb(229, 231, 235)",
+              borderRight: "1px solid rgb(229, 231, 235)",
+            }),
+        boxShadow: isActive
+          ? "none"
+          : isHovered
+          ? "0 2px 6px rgba(0, 0, 0, 0.15)"
+          : "none",
         position: isActive ? "relative" : "static",
-        zIndex: isActive ? 1 : 0,
+        zIndex: isActive ? 10 : isHovered ? 1 : 0,
         paddingLeft: "12px",
         paddingRight: isActive ? "8px" : "12px",
         gap: "4px",

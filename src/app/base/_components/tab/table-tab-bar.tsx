@@ -19,8 +19,8 @@ export function TableTabBar({
 }: TableTabBarProps) {
   return (
     <div
-      className="border-b border-gray-200 flex items-end relative"
-      style={{ backgroundColor: "#f2f4f8" }}
+      className="flex items-end relative border-b border-gray-200"
+      style={{ backgroundColor: "#E3FAFD" }}
     >
       {!isLoading && activeTableId && (
         <TableTabSelector

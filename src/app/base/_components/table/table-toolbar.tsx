@@ -2,25 +2,51 @@
 
 type TableToolbarProps = {
   onToggleSidebar: () => void;
+  activeTable?: { id: string; name: string } | null;
 };
 
-export function TableToolbar({ onToggleSidebar }: TableToolbarProps) {
+export function TableToolbar({ onToggleSidebar, activeTable }: TableToolbarProps) {
   return (
     <div className="px-4 py-1.5 border-b border-gray-200 flex items-center justify-between bg-gray-50">
-      <button
-        type="button"
-        onClick={onToggleSidebar}
-        className="w-6 h-6 flex items-center justify-center hover:bg-gray-100 rounded transition-colors"
-      >
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-gray-500">
-          <path
-            d="M1 3h12M1 7h12M1 11h12"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          />
-        </svg>
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onToggleSidebar}
+          className="w-6 h-6 flex items-center justify-center hover:bg-gray-100 rounded transition-colors"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-gray-500">
+            <path
+              d="M1 3h12M1 7h12M1 11h12"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+        {activeTable && (
+          <div className="flex items-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1" y="1" width="5" height="5" stroke="currentColor" strokeWidth="1.5" />
+              <rect x="8" y="1" width="5" height="5" stroke="currentColor" strokeWidth="1.5" />
+              <rect x="1" y="8" width="5" height="5" stroke="currentColor" strokeWidth="1.5" />
+              <rect x="8" y="8" width="5" height="5" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+            
+            <span className="text-xs font-medium text-[#011435]">Grid view</span>
+            
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path
+                d="M3 4.5l3 3 3-3"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
+        )}
+      </div>
+      
       <div className="flex items-center gap-2">
         <button
           type="button"

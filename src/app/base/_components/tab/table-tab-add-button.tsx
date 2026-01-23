@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { TableTabAddIcon } from "./table-tab-add-icon";
 
 type TableTabAddButtonProps = {
@@ -7,6 +8,8 @@ type TableTabAddButtonProps = {
 };
 
 export function TableTabAddButton({ onClick }: TableTabAddButtonProps) {
+  const [isHovered, setIsHovered] = useState(false);
+
   return (
     <button
       type="button"
@@ -17,12 +20,16 @@ export function TableTabAddButton({ onClick }: TableTabAddButtonProps) {
           onClick();
         }
       }}
-      className="px-3 py-1.5 hover:bg-gray-200 flex items-center gap-1.5 text-xs cursor-pointer"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className="px-3 py-1.5 flex items-center gap-1.5 text-xs cursor-pointer transition-shadow duration-200"
       style={{
-        backgroundColor: "#f2f4f8",
+        backgroundColor: "#E3FAFD",
         color: "rgb(100, 100, 100)",
         borderRadius: "6px",
+        borderBottom: "1px solid rgb(229, 231, 235)",
         pointerEvents: "auto",
+        boxShadow: isHovered ? "0 2px 6px rgba(0, 0, 0, 0.15)" : "none",
       }}
     >
       <TableTabAddIcon />

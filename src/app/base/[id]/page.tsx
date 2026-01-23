@@ -14,13 +14,13 @@ export default function BasePage() {
   const baseId = params?.id as string;
   const workspaceId = searchParams?.get("workspaceId") as string | null;
 
-  // Create base mutation
   const createBase = api.base.create.useMutation();
+  const createTable = api.table.create.useMutation();
   const [hasCreatedBase, setHasCreatedBase] = useState(false);
   const [hasRedirected, setHasRedirected] = useState(false);
+  const [hasCreatedDefaultTable, setHasCreatedDefaultTable] = useState(false);
 
-  // Query base's tables
-  const { data: baseData, isLoading: isLoadingBase } = api.base.getById.useQuery(
+  const { data: baseData, isLoading: isLoadingBase, refetch: refetchBase } = api.base.getById.useQuery(
     { id: baseId },
     { enabled: status === "authenticated" && !!baseId }
   );
@@ -28,14 +28,12 @@ export default function BasePage() {
   const baseTables = baseData?.dataTables ?? [];
   const isLoadingTables = isLoadingBase;
 
-  // Redirect if not authenticated
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
     }
   }, [status, router]);
 
-  // Auto-create base when page loads (only once)
   useEffect(() => {
     if (
       status === "authenticated" &&
@@ -53,7 +51,6 @@ export default function BasePage() {
           });
           setHasCreatedBase(true);
         } catch (error) {
-          // Base might already exist, which is fine
           console.error("Error creating base:", error);
           setHasCreatedBase(true);
         }
@@ -70,30 +67,55 @@ export default function BasePage() {
     }
   }, [status, baseId, workspaceId, createBase, hasCreatedBase]);
 
-  // Redirect to first table or create new table
   useEffect(() => {
     if (
       status === "authenticated" &&
       baseId &&
       hasCreatedBase &&
       !hasRedirected &&
-      !isLoadingTables
+      !isLoadingTables &&
+      !createTable.isPending
     ) {
-      // If base already has tables, redirect to the first one
-      if (baseTables.length > 0) {
-        const firstTableId = baseTables[0]?.id;
-        if (firstTableId) {
-          setHasRedirected(true);
-          router.replace(`/base/${baseId}/${firstTableId}`);
+      const initializeBase = async () => {
+        if (baseTables.length > 0) {
+          const firstTableId = baseTables[0]?.id;
+          if (firstTableId) {
+            setHasRedirected(true);
+            router.replace(`/base/${baseId}/${firstTableId}`);
+          }
+        } else if (!hasCreatedDefaultTable) {
+          try {
+            const newTableId = generateTableId();
+            await createTable.mutateAsync({
+              id: newTableId,
+              baseId: baseId,
+              name: "Table 1",
+            });
+            setHasCreatedDefaultTable(true);
+            await refetchBase();
+            setHasRedirected(true);
+            router.replace(`/base/${baseId}/${newTableId}`);
+          } catch (error) {
+            console.error("Error creating default table:", error);
+            setHasCreatedDefaultTable(true);
+          }
         }
-      } else {
-        // Only create a new table if base has no tables
-        const newTableId = generateTableId();
-        setHasRedirected(true);
-        router.replace(`/base/${baseId}/${newTableId}`);
-      }
+      };
+
+      void initializeBase();
     }
-  }, [status, baseId, hasCreatedBase, hasRedirected, router, isLoadingTables, baseTables]);
+  }, [
+    status,
+    baseId,
+    hasCreatedBase,
+    hasRedirected,
+    router,
+    isLoadingTables,
+    baseTables,
+    hasCreatedDefaultTable,
+    createTable,
+    refetchBase,
+  ]);
 
   if (status === "loading" || !hasRedirected) {
     return (
@@ -109,5 +131,5 @@ export default function BasePage() {
     return null;
   }
 
-  return null; // This page just redirects
+  return null;
 }

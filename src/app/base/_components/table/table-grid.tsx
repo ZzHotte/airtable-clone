@@ -3,10 +3,13 @@
 import { useState } from "react";
 import { flexRender, type Table } from "@tanstack/react-table";
 import type { TableRow } from "../../_hooks/use-table-data";
+import { AddColumnButton } from "./add-column-button";
+import type { ColumnType } from "./add-column-modal";
 
 type TableGridProps = {
   table: Table<TableRow>;
   onAddRow: () => void;
+  onAddColumn?: (data: { name: string; type: ColumnType; defaultValue?: string }) => void;
 };
 
 type SelectedCell = {
@@ -14,13 +17,20 @@ type SelectedCell = {
   columnId: string;
 } | null;
 
-export function TableGrid({ table, onAddRow }: TableGridProps) {
+export function TableGrid({ table, onAddRow, onAddColumn }: TableGridProps) {
   const [selectedCell, setSelectedCell] = useState<SelectedCell>(null);
   const [editingCell, setEditingCell] = useState<SelectedCell>(null);
 
   const handleCellClick = (rowIndex: number, columnId: string) => {
-    setSelectedCell({ rowIndex, columnId });
-    setEditingCell({ rowIndex, columnId });
+    const isSameCell = 
+      editingCell?.rowIndex === rowIndex && 
+      editingCell?.columnId === columnId;
+    
+    if (!isSameCell) {
+      setEditingCell(null);
+      setSelectedCell({ rowIndex, columnId });
+      setEditingCell({ rowIndex, columnId });
+    }
   };
 
   const handleCellDoubleClick = (rowIndex: number, columnId: string) => {
@@ -32,7 +42,7 @@ export function TableGrid({ table, onAddRow }: TableGridProps) {
     const rows = table.getRowModel().rows;
     const headers = table.getHeaderGroups()[0]?.headers || [];
     const editableColumns = headers.filter(
-      (h) => h.id !== "rowNumber" && h.id !== "addColumn"
+      (h) => h.id !== "rowNumber"
     );
 
     if (editableColumns.length === 0) return;
@@ -92,9 +102,24 @@ export function TableGrid({ table, onAddRow }: TableGridProps) {
     setSelectedCell(null);
   };
 
+  const handleContainerClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    const isCell = target.closest("td");
+    const isHeader = target.closest("th");
+    
+    if (!isCell && !isHeader) {
+      setEditingCell(null);
+      setSelectedCell(null);
+    }
+  };
+
   return (
-    <div className="flex-1 overflow-auto" style={{ backgroundColor: "#F6F8FC" }}>
-      <div className="inline-block bg-white">
+    <div 
+      className="flex-1 overflow-auto" 
+      style={{ backgroundColor: "#F6F8FC" }}
+      onClick={handleContainerClick}
+    >
+      <div className="inline-block relative">
         <table className="border-collapse" style={{ tableLayout: "fixed", width: "auto" }}>
         <thead className="bg-white sticky top-0 z-20">
               {table.getHeaderGroups().map((headerGroup) => (
@@ -136,9 +161,9 @@ export function TableGrid({ table, onAddRow }: TableGridProps) {
         </thead>
         <tbody className="bg-white">
           {table.getRowModel().rows.map((row) => (
-            <tr
+          <tr
               key={row.id}
-              className="hover:bg-gray-50/50 border-b border-gray-200"
+              className="hover:bg-gray-100/70 border-b border-gray-200 cursor-pointer"
             >
               {row.getVisibleCells().map((cell) => {
                 const isSelected =
@@ -152,7 +177,7 @@ export function TableGrid({ table, onAddRow }: TableGridProps) {
                 return (
                   <td
                     key={cell.id}
-                    className={`px-2 py-1 border-r border-gray-200 relative ${
+                    className={`px-2 py-1 border-r border-gray-200 relative cursor-pointer ${
                       shouldShowBlueBorder ? "ring-2 ring-blue-500" : ""
                     }`}
                     style={{
@@ -161,7 +186,8 @@ export function TableGrid({ table, onAddRow }: TableGridProps) {
                         boxShadow: "inset 0 0 0 2px rgb(59 130 246)",
                       }),
                     }}
-                    onClick={(e) => {
+                    onMouseDown={(e) => {
+                      e.preventDefault();
                       e.stopPropagation();
                       handleCellClick(row.index, cell.column.id);
                     }}
@@ -188,15 +214,15 @@ export function TableGrid({ table, onAddRow }: TableGridProps) {
               })}
             </tr>
           ))}
-          <tr className="border-b border-gray-200">
-            <td className="px-2 py-1 border-r border-gray-200">
+          <tr className="border-b border-gray-200 hover:bg-gray-100 cursor-pointer">
+            <td className="px-2 py-1 border-r border-gray-200 cursor-pointer">
               <button
                 type="button"
                 onClick={onAddRow}
-                className="w-5 h-5 flex items-center justify-center hover:bg-blue-50 rounded text-gray-400 hover:text-blue-600 transition-colors"
+                className="w-full min-h-[1.5rem] flex items-center justify-center text-gray-400 transition-colors cursor-pointer"
                 title="Add new row"
               >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <path
                     d="M8 2v12M2 8h12"
                     stroke="currentColor"
@@ -206,12 +232,19 @@ export function TableGrid({ table, onAddRow }: TableGridProps) {
                 </svg>
               </button>
             </td>
-            {table.getHeaderGroups()[0]?.headers.slice(1).map((header) => (
-              <td key={header.id} className="px-2 py-1 border-r border-gray-200"></td>
-            ))}
+            {table
+              .getHeaderGroups()[0]
+              ?.headers.slice(1)
+              .map((header) => (
+                <td
+                  key={header.id}
+                  className="px-2 py-1 border-r border-gray-200 cursor-pointer"
+                ></td>
+              ))}
           </tr>
         </tbody>
       </table>
+      {onAddColumn && <AddColumnButton onCreate={onAddColumn} />}
       </div>
     </div>
   );

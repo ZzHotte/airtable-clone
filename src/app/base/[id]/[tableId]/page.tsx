@@ -17,18 +17,15 @@ export default function BaseTablePage() {
   const tableId = params?.tableId as string;
   const workspaceId = searchParams?.get("workspaceId") as string | null;
 
-  // Create base mutation
   const createBase = api.base.create.useMutation();
   const [hasCreatedBase, setHasCreatedBase] = useState(false);
 
-  // Redirect if not authenticated
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
     }
   }, [status, router]);
 
-  // Auto-create base when page loads (only once)
   useEffect(() => {
     if (
       status === "authenticated" &&
@@ -45,17 +42,14 @@ export default function BaseTablePage() {
             name: "Untitled Base",
           });
           setHasCreatedBase(true);
-          // Remove workspaceId from URL after base is created
           if (tableId) {
             router.replace(`/base/${baseId}/${tableId}`);
           } else {
             router.replace(`/base/${baseId}`);
           }
         } catch (error) {
-          // Base might already exist, which is fine
           console.error("Error creating base:", error);
           setHasCreatedBase(true);
-          // Still remove workspaceId from URL even if base already exists
           if (tableId) {
             router.replace(`/base/${baseId}/${tableId}`);
           } else {
@@ -92,17 +86,12 @@ export default function BaseTablePage() {
 
   return (
     <div className="h-screen w-full bg-white flex overflow-hidden">
-      {/* Far Left Vertical Bar */}
       <LeftBar />
 
-      {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden bg-white">
-        {/* Base Page Content */}
         <div className="flex-1 flex flex-col overflow-hidden bg-white">
-          {/* Base Header */}
           <BaseTopBar />
 
-          {/* Table View */}
           <TableSpaces 
             baseId={baseId}
             tableId={tableId}
