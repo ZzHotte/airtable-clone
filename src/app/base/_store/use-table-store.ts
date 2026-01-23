@@ -17,6 +17,8 @@ export type Column = {
   type: "text" | "number";
 };
 
+export type CellValue = string | number | null;
+
 type SelectedCell = {
   rowIndex: number;
   columnId: string;
@@ -42,6 +44,7 @@ export function useTableStore({
 }: UseTableStoreProps) {
   const [tableDataMap, setTableDataMap] = useState<Record<string, TableRow[]>>({});
   const [tableColumnsMap, setTableColumnsMap] = useState<Record<string, Column[]>>({});
+  const [cellsMap, setCellsMap] = useState<Record<string, CellValue>>({});
   const [selectedCell, setSelectedCell] = useState<SelectedCell>(null);
   const [editingCell, setEditingCell] = useState<SelectedCell>(null);
 
@@ -112,19 +115,27 @@ export function useTableStore({
     async (rowId: string, columnId: string, value: string | number | null) => {
       if (!activeTableId) return;
 
-      const newData = [...currentData];
-      const rowIndex = newData.findIndex((row) => row.id === rowId);
-      if (rowIndex !== -1 && newData[rowIndex]) {
-        const row = newData[rowIndex];
-        newData[rowIndex] = {
-          ...row,
-          id: row.id,
-          [columnId]: value,
+      // ========== DUAL WRITE: Update cellsMap (new data structure) ==========
+      // Note: The existing data structure (tableDataMap) is updated via onSetData in table-columns.tsx
+      // This function only handles the cellsMap update for the new data structure
+      const cellKey = `${rowId}:${columnId}`;
+      setCellsMap((prev) => {
+        const updated = {
+          ...prev,
+          [cellKey]: value,
         };
-        await setData(newData);
-      }
+        console.log("[DUAL WRITE] updateCell:", {
+          tableId: activeTableId,
+          rowId,
+          columnId,
+          cellKey,
+          value,
+          cellsMapSize: Object.keys(updated).length,
+        });
+        return updated;
+      });
     },
-    [activeTableId, currentData, setData]
+    [activeTableId]
   );
 
   const setColumns = useCallback(
@@ -190,6 +201,7 @@ export function useTableStore({
   return {
     currentData,
     currentTableColumns,
+    cellsMap,
     setData,
     addRow,
     updateCell,

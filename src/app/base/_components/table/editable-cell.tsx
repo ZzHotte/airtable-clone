@@ -152,9 +152,10 @@ export function EditableCell({
       let isAtBoundary = false;
       
       if (direction === "left") {
-        isAtBoundary = input.selectionStart === 0;
+        isAtBoundary = true;
       } else if (direction === "right") {
-        isAtBoundary = input.selectionEnd === input.value.length;
+        const selectionEnd = input.selectionEnd ?? input.value.length;
+        isAtBoundary = selectionEnd === input.value.length;
       } else if (direction === "up") {
         if (columnType === "number") {
           isAtBoundary = true;

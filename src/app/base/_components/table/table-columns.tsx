@@ -16,6 +16,7 @@ export type TableColumnConfig = ColumnSchema;
 type TableColumnsProps = {
   currentData: TableRow[];
   onSetData: (data: TableRow[]) => void;
+  onUpdateCell?: (rowId: string, columnId: string, value: string | number | null) => void;
   columns?: ColumnSchema[];
 };
 
@@ -29,6 +30,7 @@ function getDefaultColumns(): ColumnSchema[] {
 export function createTableColumns({
   currentData,
   onSetData,
+  onUpdateCell,
   columns,
 }: TableColumnsProps): ColumnDef<TableRow>[] {
   const finalColumns = columns || getDefaultColumns();
@@ -84,7 +86,12 @@ export function createTableColumns({
                     id: row.id,
                     [col.id]: typedValue,
                   } as TableRow;
+                  // ========== DUAL WRITE: Update existing data structure ==========
                   onSetData(newData);
+                  // ========== DUAL WRITE: Update cellsMap (new data structure) ==========
+                  if (onUpdateCell) {
+                    onUpdateCell(row.id, col.id, typedValue);
+                  }
                 }
               }
             }}

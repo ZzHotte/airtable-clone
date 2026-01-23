@@ -59,6 +59,7 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
     setData: storeSetData,
     addRow: storeAddRow,
     addColumn: storeAddColumn,
+    updateCell: storeUpdateCell,
   } = useTableStore({
     activeTableId: currentTableId,
     externalSetData,
@@ -93,14 +94,23 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
     };
   }, [storeAddColumn]);
 
+  const handleUpdateCell = useMemo(() => {
+    return (rowId: string, columnId: string, value: string | number | null) => {
+      storeUpdateCell(rowId, columnId, value).catch((error) => {
+        console.error("Failed to update cell:", error);
+      });
+    };
+  }, [storeUpdateCell]);
+
   const columns = useMemo(
     () =>
       createTableColumns({
         currentData,
         onSetData: handleSetData,
+        onUpdateCell: handleUpdateCell,
         columns: currentTableColumns,
       }),
-    [currentData, handleSetData, currentTableColumns]
+    [currentData, handleSetData, handleUpdateCell, currentTableColumns]
   );
 
   const table = useReactTable({
