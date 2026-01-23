@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { flexRender, type Table } from "@tanstack/react-table";
-import type { TableRow } from "../../_hooks/use-table-data";
+import type { TableRow } from "../../_store/use-table-store";
 import { AddColumnButton } from "./add-column-button";
 import type { ColumnType } from "./add-column-modal";
 

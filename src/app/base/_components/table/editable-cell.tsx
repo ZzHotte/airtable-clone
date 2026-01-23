@@ -142,20 +142,41 @@ export function EditableCell({
       ArrowDown: "down",
       ArrowLeft: "left",
       ArrowRight: "right",
+      Tab: "right", 
     };
 
     if (arrowKeys[e.key] && onArrowKey) {
       const direction = arrowKeys[e.key];
       const input = e.target as HTMLTextAreaElement | HTMLInputElement;
-      const isAtBoundary =
-        (direction === "left" && input.selectionStart === 0) ||
-        (direction === "right" &&
-          input.selectionEnd === input.value.length) ||
-        (direction === "up" && input.selectionStart === 0) ||
-        (direction === "down" &&
-          input.selectionEnd === input.value.length);
+      
+      let isAtBoundary = false;
+      
+      if (direction === "left") {
+        isAtBoundary = input.selectionStart === 0;
+      } else if (direction === "right") {
+        isAtBoundary = input.selectionEnd === input.value.length;
+      } else if (direction === "up") {
+        if (columnType === "number") {
+          isAtBoundary = true;
+        } else {
+          const selectionStart = input.selectionStart ?? 0;
+          const textBeforeCursor = input.value.substring(0, selectionStart);
+          const lineNumber = (textBeforeCursor.match(/\n/g) || []).length;
+          isAtBoundary = lineNumber === 0; 
+        }
+      } else if (direction === "down") {
+        if (columnType === "number") {
+          isAtBoundary = true; 
+        } else {
+          const selectionEnd = input.selectionEnd ?? input.value.length;
+          const textAfterCursor = input.value.substring(selectionEnd);
+          const lineNumber = (textAfterCursor.match(/\n/g) || []).length;
+          const totalLines = (input.value.match(/\n/g) || []).length + 1;
+          isAtBoundary = lineNumber === totalLines - 1;
+        }
+      }
 
-      if (isAtBoundary) {
+      if (isAtBoundary && direction) {
         e.preventDefault();
         handleBlur();
         onArrowKey(direction);

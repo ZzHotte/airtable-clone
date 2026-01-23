@@ -1,22 +1,16 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import type { TableRow } from "../../_hooks/use-table-data";
+import type { TableRow } from "../../_store/use-table-store";
+import { genColumnId } from "../../_utils/id-generator";
 import { EditableCell } from "./editable-cell";
 
-/**
- * ColumnSchema: 列的 Schema 定义，一旦创建后不可变
- * - id: 列的稳定标识符
- * - name: 列的显示名称
- * - type: 列的类型，创建后固定，不允许修改
- */
 export type ColumnSchema = {
   id: string;
   name: string;
   type: "text" | "number";
 };
 
-// 为了向后兼容，保留 TableColumnConfig 作为别名
 export type TableColumnConfig = ColumnSchema;
 
 type TableColumnsProps = {
@@ -25,17 +19,20 @@ type TableColumnsProps = {
   columns?: ColumnSchema[];
 };
 
-const defaultColumns: ColumnSchema[] = [
-  { id: "name", name: "Name", type: "text" },
-  { id: "number", name: "Number", type: "number" },
-];
+function getDefaultColumns(): ColumnSchema[] {
+  return [
+    { id: genColumnId(), name: "Name", type: "text" },
+    { id: genColumnId(), name: "Number", type: "number" },
+  ];
+}
 
 export function createTableColumns({
   currentData,
   onSetData,
-  columns = defaultColumns,
+  columns,
 }: TableColumnsProps): ColumnDef<TableRow>[] {
-  const dataColumns: ColumnDef<TableRow>[] = columns.map((col) => ({
+  const finalColumns = columns || getDefaultColumns();
+  const dataColumns: ColumnDef<TableRow>[] = finalColumns.map((col) => ({
     accessorKey: col.id,
     header: () => (
       <div 
@@ -54,6 +51,7 @@ export function createTableColumns({
       cell: (info) => {
         const rowIndex = info.row.index;
         const row = info.row.original;
+        const rowId = row.id;
         const isEditing = (info as any).isEditing ?? false;
         const onStopEditing = (info as any).onStopEditing;
         const onArrowKey = (info as any).onArrowKey;
@@ -65,11 +63,11 @@ export function createTableColumns({
             columnType={col.type}
             onChange={(newValue) => {
               const newData = [...currentData];
-              if (newData[rowIndex]) {
-                // 根据列类型进行类型转换
+              const rowIndexToUpdate = newData.findIndex((r) => r.id === rowId);
+              if (rowIndexToUpdate !== -1 && newData[rowIndexToUpdate]) {
+                const row = newData[rowIndexToUpdate];
                 let typedValue: string | number | null;
                 if (col.type === "number") {
-                  // number 列：存储 number 或 null
                   if (newValue === "" || newValue === null) {
                     typedValue = null;
                   } else {
@@ -77,15 +75,17 @@ export function createTableColumns({
                     typedValue = isNaN(numValue) ? null : numValue;
                   }
                 } else {
-                  // text 列：存储 string
                   typedValue = newValue === null ? "" : String(newValue);
                 }
                 
-                newData[rowIndex] = {
-                  ...newData[rowIndex],
-                  [col.id]: typedValue,
-                };
-                onSetData(newData);
+                if (row.id) {
+                  newData[rowIndexToUpdate] = {
+                    ...row,
+                    id: row.id,
+                    [col.id]: typedValue,
+                  } as TableRow;
+                  onSetData(newData);
+                }
               }
             }}
             isEditing={isEditing}

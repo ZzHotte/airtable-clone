@@ -10,7 +10,7 @@ import {
   type Table,
 } from "@tanstack/react-table";
 import { api } from "~/trpc/react";
-import { useTableData, type TableRow } from "./_hooks/use-table-data";
+import { useTableStore, type TableRow } from "./_store/use-table-store";
 import { useTableCreation } from "./_hooks/use-table-creation";
 import { useAvailableTables } from "./_hooks/use-available-tables";
 import { createTableColumns } from "./_components/table/table-columns";
@@ -52,57 +52,46 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
     baseTables,
   });
 
-  const { currentData, handleSetData, handleAddRow } = useTableData({
+  // 使用统一的 TableStore 管理所有状态
+  const {
+    currentData,
+    currentTableColumns,
+    setData: storeSetData,
+    addRow: storeAddRow,
+    addColumn: storeAddColumn,
+  } = useTableStore({
     activeTableId: currentTableId,
     externalSetData,
   });
 
-  const [tableColumnsMap, setTableColumnsMap] = useState<
-    Record<string, Array<{ id: string; name: string; type: "text" | "number" }>>
-  >({});
-
-  const currentTableColumns = useMemo((): Array<{ id: string; name: string; type: "text" | "number" }> => {
-    if (currentTableId) {
-      return tableColumnsMap[currentTableId] || [
-        { id: "name", name: "Name", type: "text" as const },
-        { id: "number", name: "Number", type: "number" as const },
-      ];
-    }
-    return [
-      { id: "name", name: "Name", type: "text" as const },
-      { id: "number", name: "Number", type: "number" as const },
-    ];
-  }, [currentTableId, tableColumnsMap]);
-
-  const handleAddColumn = (data: { name: string; type: "text" | "number"; defaultValue?: string }) => {
-    if (!currentTableId) return;
-    
-    const newColumnId = `col_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const newColumn: { id: string; name: string; type: "text" | "number" } = {
-      id: newColumnId,
-      name: data.name || `Column ${currentTableColumns.length + 1}`,
-      type: data.type,
+  // 包装 async setData 为同步函数，以兼容 createTableColumns 的接口
+  // createTableColumns 期望 onSetData: (data: TableRow[]) => void
+  const handleSetData = useMemo(() => {
+    return (newData: TableRow[]) => {
+      // 忽略 Promise，保持同步接口
+      storeSetData(newData).catch((error) => {
+        console.error("Failed to set data:", error);
+      });
     };
-    
-    setTableColumnsMap((prev) => {
-      const updated = {
-        ...prev,
-        [currentTableId]: [...currentTableColumns, newColumn],
-      } as Record<string, Array<{ id: string; name: string; type: "text" | "number" }>>;
-      return updated;
-    });
-    
-    // 根据列类型设置默认值
-    const defaultValue = data.type === "number" 
-      ? (data.defaultValue ? parseFloat(data.defaultValue) || null : null)
-      : (data.defaultValue || "");
-    
-    const updatedData = currentData.map((row) => ({
-      ...row,
-      [newColumnId]: defaultValue,
-    }));
-    handleSetData(updatedData);
-  };
+  }, [storeSetData]);
+
+  // 包装 async addRow 为同步函数
+  const handleAddRow = useMemo(() => {
+    return () => {
+      storeAddRow().catch((error) => {
+        console.error("Failed to add row:", error);
+      });
+    };
+  }, [storeAddRow]);
+
+  // 包装 async addColumn 为同步函数
+  const handleAddColumn = useMemo(() => {
+    return (data: { name: string; type: "text" | "number"; defaultValue?: string }) => {
+      storeAddColumn(data).catch((error) => {
+        console.error("Failed to add column:", error);
+      });
+    };
+  }, [storeAddColumn]);
 
   const columns = useMemo(
     () =>
