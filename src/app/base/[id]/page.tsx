@@ -19,6 +19,15 @@ export default function BasePage() {
   const [hasCreatedBase, setHasCreatedBase] = useState(false);
   const [hasRedirected, setHasRedirected] = useState(false);
 
+  // Query base's tables
+  const { data: baseData, isLoading: isLoadingBase } = api.base.getById.useQuery(
+    { id: baseId },
+    { enabled: status === "authenticated" && !!baseId }
+  );
+
+  const baseTables = baseData?.dataTables ?? [];
+  const isLoadingTables = isLoadingBase;
+
   // Redirect if not authenticated
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -67,15 +76,24 @@ export default function BasePage() {
       status === "authenticated" &&
       baseId &&
       hasCreatedBase &&
-      !hasRedirected
+      !hasRedirected &&
+      !isLoadingTables
     ) {
-      // TODO: Query base's tables from API
-      // For now, we'll create a new table ID and redirect
-      const newTableId = generateTableId();
-      setHasRedirected(true);
-      router.replace(`/base/${baseId}/${newTableId}`);
+      // If base already has tables, redirect to the first one
+      if (baseTables.length > 0) {
+        const firstTableId = baseTables[0]?.id;
+        if (firstTableId) {
+          setHasRedirected(true);
+          router.replace(`/base/${baseId}/${firstTableId}`);
+        }
+      } else {
+        // Only create a new table if base has no tables
+        const newTableId = generateTableId();
+        setHasRedirected(true);
+        router.replace(`/base/${baseId}/${newTableId}`);
+      }
     }
-  }, [status, baseId, hasCreatedBase, hasRedirected, router]);
+  }, [status, baseId, hasCreatedBase, hasRedirected, router, isLoadingTables, baseTables]);
 
   if (status === "loading" || !hasRedirected) {
     return (
