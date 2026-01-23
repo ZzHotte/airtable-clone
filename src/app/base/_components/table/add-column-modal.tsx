@@ -8,6 +8,7 @@ type AddColumnModalProps = {
   isOpen: boolean;
   onClose: () => void;
   onCreate: (data: { name: string; type: ColumnType; defaultValue?: string }) => void;
+  position?: { top: number; left: number } | null;
 };
 
 const columnTypes: Array<{ value: ColumnType; label: string; description: string }> = [
@@ -23,7 +24,7 @@ const columnTypes: Array<{ value: ColumnType; label: string; description: string
   },
 ];
 
-export function AddColumnModal({ isOpen, onClose, onCreate }: AddColumnModalProps) {
+export function AddColumnModal({ isOpen, onClose, onCreate, position }: AddColumnModalProps) {
   const [fieldName, setFieldName] = useState("");
   const [columnType, setColumnType] = useState<ColumnType>("text");
   const [defaultValue, setDefaultValue] = useState("");
@@ -50,21 +51,29 @@ export function AddColumnModal({ isOpen, onClose, onCreate }: AddColumnModalProp
     onClose();
   };
 
-  const selectedType = columnTypes.find((t) => t.value === columnType) || columnTypes[0];
+  const selectedType = columnTypes.find((t) => t.value === columnType) ?? columnTypes[0];
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }}
+      className="fixed inset-0 z-50"
+      style={{ backgroundColor: "rgba(0, 0, 0, 0.01)" }}
       onClick={handleClose}
     >
       <div
-        className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4"
+        className="bg-white rounded-xl shadow-2xl w-full"
+        style={{
+          boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+          position: "absolute",
+          top: position ? `${position.top}px` : "50%",
+          left: position ? `${position.left}px` : "50%",
+          transform: position ? "none" : "translate(-50%, -50%)",
+          maxWidth: "calc(28rem * 2 / 3)",
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-6">
+        <div className="p-5">
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">
               Field name (optional)
             </label>
             <input
@@ -72,18 +81,25 @@ export function AddColumnModal({ isOpen, onClose, onCreate }: AddColumnModalProp
               value={fieldName}
               onChange={(e) => setFieldName(e.target.value)}
               placeholder="Field name (optional)"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               autoFocus
             />
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Field type</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Field type</label>
             <div className="relative">
+              <div className="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none">
+                {columnType === "text" ? (
+                  <span className="text-sm text-gray-600 font-medium">A</span>
+                ) : (
+                  <span className="text-sm text-gray-600 font-medium">#</span>
+                )}
+              </div>
               <select
                 value={columnType}
                 onChange={(e) => setColumnType(e.target.value as ColumnType)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white pr-10"
+                className="w-full pl-7 pr-8 py-1.5 text-xs border border-gray-300 rounded-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white"
               >
                 {columnTypes.map((type) => (
                   <option key={type.value} value={type.value}>
@@ -91,9 +107,9 @@ export function AddColumnModal({ isOpen, onClose, onCreate }: AddColumnModalProp
                   </option>
                 ))}
               </select>
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+              <div className="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none">
                 <svg
-                  className="w-5 h-5 text-gray-400"
+                  className="w-4 h-4 text-gray-400"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -107,63 +123,32 @@ export function AddColumnModal({ isOpen, onClose, onCreate }: AddColumnModalProp
                 </svg>
               </div>
             </div>
-            <p className="mt-2 text-sm text-gray-500">{selectedType.description}</p>
+            <p className="mt-1.5 text-xs text-gray-500">{selectedType?.description ?? ""}</p>
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Default</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Default</label>
             <input
               type="text"
               value={defaultValue}
               onChange={(e) => setDefaultValue(e.target.value)}
               placeholder="Enter default value (optional)"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
 
-          {!showDescription && (
-            <button
-              type="button"
-              onClick={() => setShowDescription(true)}
-              className="mb-4 flex items-center gap-2 text-sm text-gray-600 hover:text-gray-800"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path
-                  d="M8 2v12M2 8h12"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-              <span>Add description</span>
-            </button>
-          )}
-
-          {showDescription && (
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Enter description (optional)"
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-          )}
-
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+          <div className="flex justify-end gap-2 pt-3 mb-1">
             <button
               type="button"
               onClick={handleClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={handleCreate}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               Create field
             </button>

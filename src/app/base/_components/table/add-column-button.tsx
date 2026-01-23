@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { AddColumnModal, type ColumnType } from "./add-column-modal";
 
 type AddColumnButtonProps = {
@@ -9,9 +9,18 @@ type AddColumnButtonProps = {
 
 export function AddColumnButton({ onCreate }: AddColumnButtonProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [buttonPosition, setButtonPosition] = useState<{ top: number; left: number } | null>(null);
+  const buttonRef = useRef<HTMLDivElement>(null);
 
   const handleButtonClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setButtonPosition({
+        top: rect.bottom,
+        left: rect.left,
+      });
+    }
     setIsModalOpen(true);
   };
 
@@ -19,9 +28,20 @@ export function AddColumnButton({ onCreate }: AddColumnButtonProps) {
     onCreate(data);
   };
 
+  useEffect(() => {
+    if (isModalOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setButtonPosition({
+        top: rect.bottom,
+        left: rect.left,
+      });
+    }
+  }, [isModalOpen]);
+
   return (
     <>
       <div
+        ref={buttonRef}
         className="absolute bg-white border-b border-r border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer"
         style={{
           top: 0,
@@ -54,6 +74,7 @@ export function AddColumnButton({ onCreate }: AddColumnButtonProps) {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onCreate={handleCreate}
+        position={buttonPosition}
       />
     </>
   );

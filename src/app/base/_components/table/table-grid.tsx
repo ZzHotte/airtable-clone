@@ -189,6 +189,12 @@ export function TableGrid({ table, onAddRow, onAddColumn }: TableGridProps) {
                     onMouseDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
+                      if (editingCell) {
+                        const activeElement = document.activeElement;
+                        if (activeElement && (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement)) {
+                          activeElement.blur();
+                        }
+                      }
                       handleCellClick(row.index, cell.column.id);
                     }}
                     onDoubleClick={(e) => {
