@@ -4,12 +4,67 @@ import type { ColumnDef } from "@tanstack/react-table";
 import type { TableRow } from "../../_hooks/use-table-data";
 import { EditableCell } from "./editable-cell";
 
+export type TableColumnConfig = {
+  key: string;
+  name: string;
+  type: "text" | "number";
+};
+
 type TableColumnsProps = {
   currentData: TableRow[];
   onSetData: (data: TableRow[]) => void;
+  columns?: TableColumnConfig[];
+  onAddColumn?: () => void;
 };
 
-export function createTableColumns({ currentData, onSetData }: TableColumnsProps): ColumnDef<TableRow>[] {
+const defaultColumns: TableColumnConfig[] = [
+  { key: "name", name: "A Name", type: "text" },
+  { key: "number", name: "# Number", type: "number" },
+];
+
+export function createTableColumns({
+  currentData,
+  onSetData,
+  columns = defaultColumns,
+  onAddColumn,
+}: TableColumnsProps): ColumnDef<TableRow>[] {
+  const dataColumns: ColumnDef<TableRow>[] = columns.map((col) => ({
+    accessorKey: col.key,
+    header: () => (
+      <span className="text-xs text-gray-900 font-medium">{col.name}</span>
+    ),
+      cell: (info) => {
+        const rowIndex = info.row.index;
+        const row = info.row.original;
+        const isEditing = (info as any).isEditing ?? false;
+        const onStopEditing = (info as any).onStopEditing;
+        const onArrowKey = (info as any).onArrowKey;
+        const cellValue = row?.[col.key] ?? "";
+
+        return (
+          <EditableCell
+            value={cellValue}
+            onChange={(newValue) => {
+              const newData = [...currentData];
+              if (newData[rowIndex]) {
+                newData[rowIndex] = {
+                  ...newData[rowIndex],
+                  [col.key]: newValue,
+                };
+                onSetData(newData);
+              }
+            }}
+            isEditing={isEditing}
+            onStopEditing={onStopEditing}
+            onArrowKey={onArrowKey}
+            className="w-full"
+          />
+        );
+      },
+    size: 150,
+    minSize: 100,
+  }));
+
   return [
     {
       id: "rowNumber",
@@ -34,76 +89,17 @@ export function createTableColumns({ currentData, onSetData }: TableColumnsProps
       size: 50,
       enableResizing: false,
     },
-    {
-      accessorKey: "name",
-      header: () => (
-        <span className="text-xs text-gray-900 font-medium">A Name</span>
-      ),
-      cell: (info) => {
-        const rowIndex = info.row.index;
-        const row = info.row.original;
-        const isEditing = (info as any).isEditing ?? false;
-        const onStopEditing = (info as any).onStopEditing;
-        return (
-          <EditableCell
-            value={row?.name ?? ""}
-            onChange={(newValue) => {
-              const newData = [...currentData];
-              if (newData[rowIndex]) {
-                newData[rowIndex] = {
-                  ...newData[rowIndex],
-                  name: newValue,
-                };
-                onSetData(newData);
-              }
-            }}
-            isEditing={isEditing}
-            onStopEditing={onStopEditing}
-            className="w-full"
-          />
-        );
-      },
-      size: 150,
-      minSize: 100,
-    },
-    {
-      accessorKey: "number",
-      header: () => (
-        <span className="text-xs text-gray-900 font-medium"># Number</span>
-      ),
-      cell: (info) => {
-        const rowIndex = info.row.index;
-        const row = info.row.original;
-        const isEditing = (info as any).isEditing ?? false;
-        const onStopEditing = (info as any).onStopEditing;
-        return (
-          <EditableCell
-            value={row?.number ?? ""}
-            onChange={(newValue) => {
-              const newData = [...currentData];
-              if (newData[rowIndex]) {
-                newData[rowIndex] = {
-                  ...newData[rowIndex],
-                  number: newValue,
-                };
-                onSetData(newData);
-              }
-            }}
-            isEditing={isEditing}
-            onStopEditing={onStopEditing}
-            className="w-full"
-          />
-        );
-      },
-      size: 150,
-      minSize: 100,
-    },
+    ...dataColumns,
     {
       id: "addColumn",
       header: () => (
         <div className="flex items-center justify-center">
           <button
             type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddColumn?.();
+            }}
             className="w-5 h-5 flex items-center justify-center hover:bg-blue-50 rounded text-gray-400 hover:text-blue-600 transition-colors"
             title="Add column"
           >

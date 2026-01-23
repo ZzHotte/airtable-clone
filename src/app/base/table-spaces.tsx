@@ -59,9 +59,39 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
     externalSetData,
   });
 
+  const [tableColumns, setTableColumns] = useState<
+    Array<{ key: string; name: string; type: "text" | "number" }>
+  >([
+    { key: "name", name: "A Name", type: "text" },
+    { key: "number", name: "# Number", type: "number" },
+  ]);
+
+  const handleAddColumn = () => {
+    const newColumnKey = `col_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const newColumn = {
+      key: newColumnKey,
+      name: `Column ${tableColumns.length + 1}`,
+      type: "text" as const,
+    };
+    setTableColumns([...tableColumns, newColumn]);
+    
+    // 为所有现有行添加新列的字段
+    const updatedData = currentData.map((row) => ({
+      ...row,
+      [newColumnKey]: "",
+    }));
+    handleSetData(updatedData);
+  };
+
   const columns = useMemo(
-    () => createTableColumns({ currentData, onSetData: handleSetData }),
-    [currentData, handleSetData]
+    () =>
+      createTableColumns({
+        currentData,
+        onSetData: handleSetData,
+        columns: tableColumns,
+        onAddColumn: handleAddColumn,
+      }),
+    [currentData, handleSetData, tableColumns, handleAddColumn]
   );
 
   const table = useReactTable({

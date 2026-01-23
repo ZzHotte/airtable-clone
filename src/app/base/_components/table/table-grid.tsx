@@ -28,11 +28,62 @@ export function TableGrid({ table, onAddRow }: TableGridProps) {
     setSelectedCell({ rowIndex, columnId });
   };
 
+  const moveToCell = (direction: "up" | "down" | "left" | "right", fromRowIndex: number, fromColumnId: string) => {
+    const rows = table.getRowModel().rows;
+    const headers = table.getHeaderGroups()[0]?.headers || [];
+    const editableColumns = headers.filter(
+      (h) => h.id !== "rowNumber" && h.id !== "addColumn"
+    );
+
+    if (editableColumns.length === 0) return;
+
+    const currentColIndex = editableColumns.findIndex((h) => h.id === fromColumnId);
+    if (currentColIndex === -1) return;
+
+    let newRowIndex = fromRowIndex;
+    let newColIndex = currentColIndex;
+
+    switch (direction) {
+      case "up":
+        newRowIndex = Math.max(0, fromRowIndex - 1);
+        break;
+      case "down":
+        newRowIndex = Math.min(rows.length - 1, fromRowIndex + 1);
+        break;
+      case "left":
+        newColIndex = Math.max(0, currentColIndex - 1);
+        break;
+      case "right":
+        newColIndex = Math.min(editableColumns.length - 1, currentColIndex + 1);
+        break;
+    }
+
+    const newColumnId = editableColumns[newColIndex]?.id;
+    if (newColumnId) {
+      setEditingCell(null);
+      setSelectedCell({ rowIndex: newRowIndex, columnId: newColumnId });
+      setEditingCell({ rowIndex: newRowIndex, columnId: newColumnId });
+    }
+  };
+
   const handleCellKeyDown = (e: React.KeyboardEvent, rowIndex: number, columnId: string) => {
     if (e.key === "Enter" && !editingCell) {
       e.preventDefault();
       setEditingCell({ rowIndex, columnId });
       setSelectedCell({ rowIndex, columnId });
+      return;
+    }
+
+    const arrowKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"] as const;
+    if (arrowKeys.includes(e.key as typeof arrowKeys[number]) && selectedCell) {
+      e.preventDefault();
+      const directionMap: Record<typeof arrowKeys[number], "up" | "down" | "left" | "right"> = {
+        ArrowUp: "up",
+        ArrowDown: "down",
+        ArrowLeft: "left",
+        ArrowRight: "right",
+      };
+      moveToCell(directionMap[e.key as typeof arrowKeys[number]], rowIndex, columnId);
     }
   };
 
@@ -128,6 +179,9 @@ export function TableGrid({ table, onAddRow }: TableGridProps) {
                       ...cell.getContext(),
                       isEditing,
                       onStopEditing: handleStopEditing,
+                      onArrowKey: (direction: "up" | "down" | "left" | "right") => {
+                        moveToCell(direction, row.index, cell.column.id);
+                      },
                     })}
                   </td>
                 );

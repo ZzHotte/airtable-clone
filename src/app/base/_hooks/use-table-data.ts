@@ -2,8 +2,7 @@ import { useState, useMemo, useCallback } from "react";
 
 export type TableRow = {
   id: string;
-  name: string;
-  number: string;
+  [key: string]: string;
 };
 
 type UseTableDataProps = {
@@ -39,8 +38,6 @@ export function useTableData({ activeTableId, externalSetData }: UseTableDataPro
   const handleAddRow = useCallback(() => {
     const newRow: TableRow = {
       id: String(currentData.length + 1),
-      name: "",
-      number: "",
     };
     handleSetData([...currentData, newRow]);
   }, [currentData, handleSetData]);
