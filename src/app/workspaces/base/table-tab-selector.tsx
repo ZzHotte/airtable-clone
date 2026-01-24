@@ -35,7 +35,7 @@ export function TableTabSelector({ tabs, activeTabId, onTabChange, onAddNewTab }
             onClick={() => onTabChange(tab.id)}
             onMouseEnter={() => {
               // Prefetch data on hover for instant loading when clicked
-              if (!isActive && backendSync.prefetchData) {
+              if (!isActive) {
                 backendSync.prefetchData(tab.id);
               }
             }}

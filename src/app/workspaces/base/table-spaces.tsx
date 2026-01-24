@@ -19,6 +19,7 @@ import { TableSidebar } from "./_components/table/table-sidebar";
 import { TableToolbar } from "./_components/table/table-toolbar";
 import { TableGrid } from "./_components/table/table-grid";
 import { TableBottomBar } from "./_components/table/table-bottom-bar";
+import { TableSkeleton } from "./_components/table/table-skeleton";
 
 type TableSpacesProps = {
   baseId?: string;
@@ -54,6 +55,20 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
 
   const backendSync = useTableBackendSync();
 
+  // Use React Query to load data with caching for instant loading
+  // This leverages React Query's cache - subsequent visits will be instant
+  const { data: tableData, isLoading: isLoadingTableData } = api.tableData.load.useQuery(
+    { tableId: currentTableId },
+    {
+      enabled: !!currentTableId,
+      staleTime: 30 * 1000, // Consider data fresh for 30 seconds
+      gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
+      // Use cached data immediately if available, then revalidate in background
+      refetchOnWindowFocus: false,
+      refetchOnMount: false, // Don't refetch if data is in cache
+    }
+  );
+
   // 使用统一的 TableStore 管理所有状态
   const {
     currentData,
@@ -68,6 +83,8 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
     activeTableId: currentTableId,
     externalSetData,
     backendSync,
+    // Pass preloaded data to store for instant rendering
+    initialData: tableData,
   });
 
   // 包装 async setData 为同步函数，以兼容 createTableColumns 的接口
@@ -107,17 +124,20 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
     };
   }, [storeUpdateCell]);
 
+  // CRITICAL OPTIMIZATION: columns should NOT depend on cellsMap
+  // Cell values are read on-demand via getCellValue during render
+  // This prevents column re-creation on every cell update
   const columns = useMemo(
     () =>
       createTableColumns({
         currentData,
-        cellsMap,
+        cellsMap: {}, // Not used when getCellValue is provided
         getCellValue,
         onSetData: handleSetData,
         onUpdateCell: handleUpdateCell,
         columns: currentTableColumns,
       }),
-    [currentData, cellsMap, getCellValue, handleSetData, handleUpdateCell, currentTableColumns]
+    [currentData, getCellValue, handleSetData, handleUpdateCell, currentTableColumns]
   );
 
   const table = useReactTable({
@@ -154,7 +174,11 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
             activeTable={availableTables.find((t) => t.id === currentTableId) || null}
           />
 
-          <TableGrid key={currentTableId} table={table} onAddRow={handleAddRow} onAddColumn={handleAddColumn} />
+          {isLoadingTableData && !tableData ? (
+            <TableSkeleton />
+          ) : (
+            <TableGrid key={currentTableId} table={table} onAddRow={handleAddRow} onAddColumn={handleAddColumn} />
+          )}
 
           <TableBottomBar recordCount={currentData.length} onAddRow={handleAddRow} />
         </div>

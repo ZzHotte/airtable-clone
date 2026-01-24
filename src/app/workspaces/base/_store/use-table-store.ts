@@ -49,12 +49,15 @@ type UseTableStoreProps = {
   activeTableId: string | null;
   externalSetData?: (data: TableRow[]) => void;
   backendSync?: BackendSync;
+  // Optional: Preloaded data from React Query cache for instant rendering
+  initialData?: { columns: Column[]; rows: TableRow[] } | null;
 };
 
 export function useTableStore({ 
   activeTableId, 
   externalSetData,
-  backendSync 
+  backendSync,
+  initialData,
 }: UseTableStoreProps) {
   const [tableDataMap, setTableDataMap] = useState<Record<string, TableRow[]>>({});
   const [tableColumnsMap, setTableColumnsMap] = useState<Record<string, Column[]>>({});
@@ -62,22 +65,27 @@ export function useTableStore({
   const [selectedCell, setSelectedCell] = useState<SelectedCell>(null);
   const [editingCell, setEditingCell] = useState<SelectedCell>(null);
 
-  // Get cells map for current table (nested structure: rowId -> colId -> value)
-  const cellsMap = useMemo(
-    () => (activeTableId ? cellsMapState[activeTableId] ?? {} : {}),
-    [activeTableId, cellsMapState]
-  );
-
-  // Helper: Get cell value from nested structure
+  // CRITICAL OPTIMIZATION: getCellValue reads directly from cellsMapState
+  // This prevents cellsMap reference changes from triggering column re-creation
+  // Cell updates only affect the specific cell, not the entire column definition
   const getCellValue = useCallback(
     (rowId: string, colId: string, colType: "text" | "number"): CellValue => {
       if (!activeTableId) return colType === "number" ? null : "";
-      const rowMap = cellsMap[rowId];
+      const tableMap = cellsMapState[activeTableId];
+      if (!tableMap) return colType === "number" ? null : "";
+      const rowMap = tableMap[rowId];
       if (!rowMap) return colType === "number" ? null : "";
       const value = rowMap[colId];
       return value ?? (colType === "number" ? null : "");
     },
-    [activeTableId, cellsMap]
+    [activeTableId, cellsMapState]
+  );
+
+  // Get cells map for current table (nested structure: rowId -> colId -> value)
+  // This is only used for backward compatibility, getCellValue should be preferred
+  const cellsMap = useMemo(
+    () => (activeTableId ? cellsMapState[activeTableId] ?? {} : {}),
+    [activeTableId, cellsMapState]
   );
 
   const getDefaultColumns = useCallback((): Column[] => {
@@ -226,6 +234,17 @@ export function useTableStore({
     }
   }, [activeTableId, currentData, currentTableColumns, cellsMapState, backendSync]);
 
+  // Debounce timer refs for cell sync (per cell key)
+  const syncTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      syncTimersRef.current.forEach((timer) => clearTimeout(timer));
+      syncTimersRef.current.clear();
+    };
+  }, []);
+
   const updateCell = useCallback(
     async (rowId: string, columnId: string, value: string | number | null) => {
       if (!activeTableId) return;
@@ -245,13 +264,27 @@ export function useTableStore({
         return { ...prev, [activeTableId]: updatedTableMap };
       });
 
-      if (backendSync?.syncCell) {
-        try {
-          await backendSync.syncCell(activeTableId, rowId, columnId, value);
-        } catch (error) {
-          console.error("Failed to sync cell to backend:", error);
-        }
+      // Debounce backend sync to avoid blocking input
+      // Clear existing timer for this cell
+      const cellKey = `${activeTableId}:${rowId}:${columnId}`;
+      const existingTimer = syncTimersRef.current.get(cellKey);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
       }
+
+      // Set new timer for debounced sync (500ms delay)
+      const timer = setTimeout(async () => {
+        syncTimersRef.current.delete(cellKey);
+        if (backendSync?.syncCell) {
+          try {
+            await backendSync.syncCell(activeTableId, rowId, columnId, value);
+          } catch (error) {
+            console.error("Failed to sync cell to backend:", error);
+          }
+        }
+      }, 500);
+      
+      syncTimersRef.current.set(cellKey, timer);
     },
     [activeTableId, backendSync]
   );
@@ -362,15 +395,43 @@ export function useTableStore({
     loadColumnsRef.current = backendSync?.loadColumns;
   }, [backendSync?.loadData, backendSync?.loadColumns]);
   
+  // Handle initial data from React Query cache (instant loading)
+  useEffect(() => {
+    if (initialData && activeTableId) {
+      const { rows, columns } = initialData;
+      // Only set if we don't already have this data (avoid overwriting with stale cache)
+      const hasData = (tableDataMap[activeTableId]?.length ?? 0) > 0;
+      const hasColumns = (tableColumnsMap[activeTableId]?.length ?? 0) > 0;
+      
+      if (!hasData && rows && rows.length > 0) {
+        setTableDataMap((prev) => ({ ...prev, [activeTableId]: rows }));
+      }
+      if (!hasColumns && columns && columns.length > 0) {
+        setTableColumnsMap((prev) => ({ ...prev, [activeTableId]: columns }));
+      }
+      if (columns && columns.length > 0 && rows && rows.length > 0) {
+        syncRowsToCellsMap(activeTableId, rows, columns);
+        lastLoadedTableIdRef.current = activeTableId;
+      }
+    }
+  }, [initialData, activeTableId, syncRowsToCellsMap, tableDataMap, tableColumnsMap]);
+  
+  // Fallback: Load from backend if no initial data and not already loaded
   useEffect(() => {
     if (!activeTableId || !loadDataRef.current || !loadColumnsRef.current) {
-      // Reset ref when no table is active
       lastLoadedTableIdRef.current = null;
       return;
     }
     
-    // Skip if we've already loaded this table
-    if (lastLoadedTableIdRef.current === activeTableId) return;
+    // Skip if we've already loaded this table (data is in state)
+    if (lastLoadedTableIdRef.current === activeTableId) {
+      const hasData = (tableDataMap[activeTableId]?.length ?? 0) > 0;
+      const hasColumns = (tableColumnsMap[activeTableId]?.length ?? 0) > 0;
+      if (hasData || hasColumns) return;
+    }
+
+    // Skip if we have initial data (it will be handled by the effect above)
+    if (initialData && initialData.rows && initialData.columns) return;
 
     let cancelled = false;
     void (async () => {
@@ -381,24 +442,12 @@ export function useTableStore({
         ]);
         if (cancelled) return;
         
-        // Mark as loaded before updating state to prevent re-triggering
         lastLoadedTableIdRef.current = activeTableId;
         
         setTableDataMap((prev) => ({ ...prev, [activeTableId]: rows }));
         setTableColumnsMap((prev) => ({ ...prev, [activeTableId]: columns }));
         
-        // Only sync to cellsMap if we have columns
         if (columns.length > 0) {
-          // Debug: log loaded data
-          if (process.env.NODE_ENV === "development") {
-            console.log("[useTableStore] Loaded data:", {
-              tableId: activeTableId,
-              rowsCount: rows.length,
-              columnsCount: columns.length,
-              sampleRow: rows[0],
-              sampleColumns: columns.slice(0, 3),
-            });
-          }
           syncRowsToCellsMap(activeTableId, rows, columns);
         }
       } catch (error) {
@@ -408,7 +457,7 @@ export function useTableStore({
     return () => {
       cancelled = true;
     };
-  }, [activeTableId, syncRowsToCellsMap]);
+  }, [activeTableId, syncRowsToCellsMap, tableDataMap, tableColumnsMap, initialData]);
 
   return {
     currentData,
