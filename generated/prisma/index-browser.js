@@ -198,6 +198,8 @@ exports.Prisma.TableColumnScalarFieldEnum = {
   name: 'name',
   type: 'type',
   order: 'order',
+  isHidden: 'isHidden',
+  isComputed: 'isComputed',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
@@ -205,8 +207,19 @@ exports.Prisma.TableColumnScalarFieldEnum = {
 exports.Prisma.TableRowScalarFieldEnum = {
   id: 'id',
   tableId: 'tableId',
-  data: 'data',
+  order: 'order',
   createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.TableCellScalarFieldEnum = {
+  id: 'id',
+  tableId: 'tableId',
+  rowId: 'rowId',
+  columnId: 'columnId',
+  valueText: 'valueText',
+  valueNumber: 'valueNumber',
+  valueType: 'valueType',
   updatedAt: 'updatedAt'
 };
 
@@ -217,7 +230,7 @@ exports.Prisma.TableViewScalarFieldEnum = {
   filters: 'filters',
   sort: 'sort',
   search: 'search',
-  visibleColumnKeys: 'visibleColumnKeys',
+  visibleColumnIds: 'visibleColumnIds',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
@@ -267,6 +280,7 @@ exports.Prisma.ModelName = {
   DataTable: 'DataTable',
   TableColumn: 'TableColumn',
   TableRow: 'TableRow',
+  TableCell: 'TableCell',
   TableView: 'TableView'
 };
 

@@ -131,6 +131,7 @@ model DataTable {
 
   columns TableColumn[]
   rows    TableRow[]
+  cells   TableCell[]
   views   TableView[]
 
   @@index([baseId])
@@ -141,16 +142,19 @@ model TableColumn {
   tableId String
   table   DataTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
 
-  // 给列一个稳定的 key（不要用 name 当 key）
-  key   String // e.g. "col_k9s8d2"
-  name  String
-  type  ColumnType
-  order Int
+  key        String
+  name       String
+  type       ColumnType
+  order      Int
+  isHidden   Boolean    @default(false)
+  isComputed Boolean    @default(false)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  tableCells TableCell[]
 
   @@unique([tableId, key])
+  @@unique([tableId, name])
   @@index([tableId, order])
 }
 
@@ -164,13 +168,43 @@ model TableRow {
   tableId String
   table   DataTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
 
-  // 关键：JSONB 存整行
-  data Json
-
+  // order: 用于排序，不保证连续
+  // 初始: 1000, 2000, 3000
+  // 插入: 1500
+  order     BigInt
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  cells TableCell[]
+
+  @@index([tableId, order])
   @@index([tableId, createdAt])
+}
+
+model TableCell {
+  id String @id @default(cuid())
+
+  tableId String
+  table   DataTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  rowId String
+  row   TableRow @relation(fields: [rowId], references: [id], onDelete: Cascade)
+
+  columnId String
+  column   TableColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+
+  // ✅ typed value（支持 DB-level filter/sort）
+  valueText   String?
+  valueNumber Float?
+  valueType   ColumnType
+
+  updatedAt DateTime @updatedAt
+  // 文本 contains/search 建议用 pg trigram 或 tsvector（后面说）
+
+  @@unique([rowId, columnId]) // ✅ 1 cell = (row, col)
+  @@index([tableId, rowId])
+  @@index([tableId, columnId])
+  @@index([columnId, valueNumber]) // ✅ number filter/sort 性能关键
 }
 
 model TableView {
@@ -180,11 +214,11 @@ model TableView {
 
   name String
 
-  // view 配置（你要求：filters/sort/search/hide columns）
-  filters           Json
-  sort              Json
-  search            String?
-  visibleColumnKeys String[] // 或者 Json
+  filters Json
+  sort    Json
+  search  String?
+
+  visibleColumnIds String[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
