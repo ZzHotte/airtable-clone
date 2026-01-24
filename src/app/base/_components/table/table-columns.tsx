@@ -1,7 +1,7 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import type { TableRow } from "../../_store/use-table-store";
+import type { TableRow, CellValue } from "../../_store/use-table-store";
 import { genColumnId } from "../../_utils/id-generator";
 import { EditableCell } from "./editable-cell";
 
@@ -15,7 +15,8 @@ export type TableColumnConfig = ColumnSchema;
 
 type TableColumnsProps = {
   currentData: TableRow[];
-  onSetData: (data: TableRow[]) => void;
+  cellsMap: Record<string, CellValue>;
+  onSetData?: (data: TableRow[]) => void; // Deprecated: No longer used, kept for backward compatibility
   onUpdateCell?: (rowId: string, columnId: string, value: string | number | null) => void;
   columns?: ColumnSchema[];
 };
@@ -29,6 +30,7 @@ function getDefaultColumns(): ColumnSchema[] {
 
 export function createTableColumns({
   currentData,
+  cellsMap,
   onSetData,
   onUpdateCell,
   columns,
@@ -57,42 +59,31 @@ export function createTableColumns({
         const isEditing = (info as any).isEditing ?? false;
         const onStopEditing = (info as any).onStopEditing;
         const onArrowKey = (info as any).onArrowKey;
-        const cellValue = row?.[col.id] ?? (col.type === "number" ? null : "");
+        const cellKey = `${rowId}:${col.id}`;
+        const map = cellsMap ?? {};
+        const cellValue = map[cellKey] ?? (col.type === "number" ? null : "");
 
         return (
           <EditableCell
             value={cellValue}
             columnType={col.type}
             onChange={(newValue) => {
-              const newData = [...currentData];
-              const rowIndexToUpdate = newData.findIndex((r) => r.id === rowId);
-              if (rowIndexToUpdate !== -1 && newData[rowIndexToUpdate]) {
-                const row = newData[rowIndexToUpdate];
-                let typedValue: string | number | null;
-                if (col.type === "number") {
-                  if (newValue === "" || newValue === null) {
-                    typedValue = null;
-                  } else {
-                    const numValue = typeof newValue === "number" ? newValue : parseFloat(String(newValue));
-                    typedValue = isNaN(numValue) ? null : numValue;
-                  }
+              let typedValue: string | number | null;
+              if (col.type === "number") {
+                if (newValue === "" || newValue === null) {
+                  typedValue = null;
                 } else {
-                  typedValue = newValue === null ? "" : String(newValue);
+                  const numValue = typeof newValue === "number" ? newValue : parseFloat(String(newValue));
+                  typedValue = isNaN(numValue) ? null : numValue;
                 }
-                
-                if (row.id) {
-                  newData[rowIndexToUpdate] = {
-                    ...row,
-                    id: row.id,
-                    [col.id]: typedValue,
-                  } as TableRow;
-                  // ========== DUAL WRITE: Update existing data structure ==========
-                  onSetData(newData);
-                  // ========== DUAL WRITE: Update cellsMap (new data structure) ==========
-                  if (onUpdateCell) {
-                    onUpdateCell(row.id, col.id, typedValue);
-                  }
-                }
+              } else {
+                typedValue = newValue === null ? "" : String(newValue);
+              }
+              
+              // ========== SINGLE WRITE: Update cellsMap (new data structure) ==========
+              // Note: tableDataMap is no longer updated here. currentData derives row[col.id] from cellsMap.
+              if (onUpdateCell && rowId) {
+                onUpdateCell(rowId, col.id, typedValue);
               }
             }}
             isEditing={isEditing}

@@ -56,6 +56,7 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
   const {
     currentData,
     currentTableColumns,
+    cellsMap,
     setData: storeSetData,
     addRow: storeAddRow,
     addColumn: storeAddColumn,
@@ -106,11 +107,12 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
     () =>
       createTableColumns({
         currentData,
+        cellsMap,
         onSetData: handleSetData,
         onUpdateCell: handleUpdateCell,
         columns: currentTableColumns,
       }),
-    [currentData, handleSetData, handleUpdateCell, currentTableColumns]
+    [currentData, cellsMap, handleSetData, handleUpdateCell, currentTableColumns]
   );
 
   const table = useReactTable({
