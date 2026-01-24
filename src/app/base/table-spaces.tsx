@@ -154,7 +154,7 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
             activeTable={availableTables.find((t) => t.id === currentTableId) || null}
           />
 
-          <TableGrid key={currentTableId} table={table} onAddRow={handleAddRow} onAddColumn={handleAddColumn} />
+          <TableGrid key={currentTableId} table={table} onAddRow={handleAddRow} onAddColumn={handleAddColumn} tableId={currentTableId} />
 
           <TableBottomBar recordCount={currentData.length} onAddRow={handleAddRow} />
         </div>

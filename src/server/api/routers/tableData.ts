@@ -7,6 +7,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import { type ColumnType } from "../../../../generated/prisma";
+import { randomBytes } from "crypto";
 
 const tableIdSchema = z
   .string()
@@ -21,6 +22,12 @@ const columnSchema = z.object({
 const tableRowSchema = z.object({
   id: z.string().min(1),
 }).catchall(z.union([z.string(), z.number(), z.null()]));
+
+// Helper function to generate row IDs (server-side)
+function genRowId(): string {
+  const randomPart = randomBytes(12).toString("base64url").slice(0, 21);
+  return `row_${randomPart}`;
+}
 
 export const tableDataRouter = createTRPCRouter({
   /**
@@ -320,5 +327,211 @@ export const tableDataRouter = createTRPCRouter({
       });
 
       return { ok: true };
+    }),
+
+  /**
+   * Add 100k rows to a table (bulk insert)
+   */
+  addBulkRows: protectedProcedure
+    .input(
+      z.object({
+        tableId: tableIdSchema,
+        count: z.number().int().min(1).max(1000000).default(100000),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const owned = await ctx.db.dataTable.findFirst({
+        where: {
+          id: input.tableId,
+          base: { workspace: { ownerId: ctx.session.user.id } },
+        },
+      });
+      if (!owned) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Table not found or you don't have permission",
+        });
+      }
+
+      const dbColumns = await ctx.db.tableColumn.findMany({
+        where: { tableId: input.tableId },
+        orderBy: { order: "asc" },
+        select: { id: true, key: true, type: true },
+      });
+
+      if (dbColumns.length === 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Table has no columns",
+        });
+      }
+
+      // Get the current max order to continue from there
+      const maxOrderRow = await ctx.db.tableRow.findFirst({
+        where: { tableId: input.tableId },
+        orderBy: { order: "desc" },
+        select: { order: true },
+      });
+      const startOrder = maxOrderRow ? Number(maxOrderRow.order) + 1000 : 1000;
+
+      // Batch insert rows (1000 at a time for performance)
+      const batchSize = 1000;
+      const totalBatches = Math.ceil(input.count / batchSize);
+
+      for (let batch = 0; batch < totalBatches; batch++) {
+        const batchStart = batch * batchSize;
+        const batchEnd = Math.min(batchStart + batchSize, input.count);
+        const batchCount = batchEnd - batchStart;
+
+        // Generate rows for this batch
+        const rows = Array.from({ length: batchCount }, (_, i) => {
+          const order = BigInt(startOrder + (batchStart + i) * 1000);
+          return {
+            id: genRowId(),
+            tableId: input.tableId,
+            order,
+          };
+        });
+
+        // Insert rows
+        await ctx.db.tableRow.createMany({
+          data: rows,
+        });
+
+        // Insert cells for all rows in this batch
+        const cellInserts = [];
+        for (const row of rows) {
+          for (const col of dbColumns) {
+            const valueType = col.type as ColumnType;
+            cellInserts.push({
+              tableId: input.tableId,
+              rowId: row.id,
+              columnId: col.id,
+              valueType,
+              valueText: valueType === "text" ? "" : null,
+              valueNumber: valueType === "number" ? null : null,
+            });
+          }
+        }
+
+        // Insert cells in batches of 5000
+        const cellBatchSize = 5000;
+        for (let i = 0; i < cellInserts.length; i += cellBatchSize) {
+          await ctx.db.tableCell.createMany({
+            data: cellInserts.slice(i, i + cellBatchSize),
+          });
+        }
+      }
+
+      return { ok: true, rowsAdded: input.count };
+    }),
+
+  /**
+   * Infinite query for paginated row loading
+   */
+  loadInfinite: protectedProcedure
+    .input(
+      z.object({
+        tableId: tableIdSchema,
+        limit: z.number().int().min(1).max(1000).default(100),
+        cursor: z.number().int().min(0).optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const owned = await ctx.db.dataTable.findFirst({
+        where: {
+          id: input.tableId,
+          base: { workspace: { ownerId: ctx.session.user.id } },
+        },
+      });
+      if (!owned) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Table not found or you don't have permission",
+        });
+      }
+
+      const [columns, totalCount] = await Promise.all([
+        ctx.db.tableColumn.findMany({
+          where: { tableId: input.tableId },
+          orderBy: { order: "asc" },
+        }),
+        ctx.db.tableRow.count({
+          where: { tableId: input.tableId },
+        }),
+      ]);
+
+      const colList = columns.map((c) => ({
+        id: c.key,
+        name: c.name,
+        type: c.type as "text" | "number",
+      }));
+
+      const offset = input.cursor ?? 0;
+      const rows = await ctx.db.tableRow.findMany({
+        where: { tableId: input.tableId },
+        orderBy: { order: "asc" },
+        skip: offset,
+        take: input.limit + 1, // Fetch one extra to determine if there's more
+      });
+
+      const hasMore = rows.length > input.limit;
+      const actualRows = hasMore ? rows.slice(0, input.limit) : rows;
+
+      // Fetch cells for these rows
+      const rowIds = actualRows.map((r) => r.id);
+      const cells = await ctx.db.tableCell.findMany({
+        where: {
+          tableId: input.tableId,
+          rowId: { in: rowIds },
+        },
+      });
+
+      // Build maps for column lookup
+      const columnIdToKey = new Map(columns.map((c) => [c.id, c.key]));
+      const columnKeyToId = new Map(columns.map((c) => [c.key, c.id]));
+
+      // Build cell map
+      const cellByKey = new Map<string, { valueText: string | null; valueNumber: number | null; valueType: string }>();
+      for (const c of cells) {
+        const cellKey = `${c.rowId}:${c.columnId}`;
+        cellByKey.set(cellKey, c);
+        
+        if (columnKeyToId.has(c.columnId)) {
+          const actualId = columnKeyToId.get(c.columnId)!;
+          if (actualId !== c.columnId) {
+            cellByKey.set(`${c.rowId}:${actualId}`, c);
+          }
+        }
+        if (columnIdToKey.has(c.columnId)) {
+          const key = columnIdToKey.get(c.columnId)!;
+          if (key !== c.columnId) {
+            cellByKey.set(`${c.rowId}:${key}`, c);
+          }
+        }
+      }
+
+      const rowsOut = actualRows.map((r) => {
+        const row: Record<string, string | number | null> = { id: r.id };
+        for (const col of columns) {
+          const key = col.key;
+          let cell = cellByKey.get(`${r.id}:${col.id}`) || 
+                     cellByKey.get(`${r.id}:${col.key}`);
+          
+          if (cell) {
+            row[key] = cell.valueType === "number" ? (cell.valueNumber ?? null) : (cell.valueText ?? "");
+          } else {
+            row[key] = col.type === "number" ? null : "";
+          }
+        }
+        return row as { id: string; [k: string]: string | number | null };
+      });
+
+      return {
+        columns: colList,
+        rows: rowsOut,
+        totalCount,
+        nextCursor: hasMore ? offset + input.limit : undefined,
+      };
     }),
 });
