@@ -1,17 +1,13 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+import { Prisma } from "@prisma/client";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 
-// Base ID validation schema (format: "app" + 16 alphanumeric characters)
 const baseIdSchema = z
   .string()
   .regex(/^app[a-zA-Z0-9]{16}$/, "Base ID must start with 'app' followed by 16 alphanumeric characters");
 
 export const baseRouter = createTRPCRouter({
-  /**
-   * Get a single base by ID
-   * Returns null if base doesn't exist
-   */
   getById: protectedProcedure
     .input(
       z.object({
@@ -32,7 +28,7 @@ export const baseRouter = createTRPCRouter({
           workspace: true,
           dataTables: {
             orderBy: {
-              createdAt: "asc", // Order by creation time, oldest first
+              createdAt: "asc",
             },
           },
         },
@@ -41,9 +37,6 @@ export const baseRouter = createTRPCRouter({
       return base ?? null;
     }),
 
-  /**
-   * Create a new base or return existing one
-   */
   create: protectedProcedure
     .input(
       z.object({
@@ -55,7 +48,6 @@ export const baseRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
 
-      // Verify that the workspace exists and belongs to the user
       const workspace = await ctx.db.workspace.findFirst({
         where: {
           id: input.workspaceId,
@@ -70,7 +62,6 @@ export const baseRouter = createTRPCRouter({
         });
       }
 
-      // Check if base already exists
       const existingBase = await ctx.db.base.findUnique({
         where: { id: input.id },
       });
@@ -87,21 +78,43 @@ export const baseRouter = createTRPCRouter({
         }
       }
 
-      // Create new base
-      const base = await ctx.db.base.create({
-        data: {
-          id: input.id,
-          name: input.name,
-          workspaceId: input.workspaceId,
-        },
-      });
+      try {
+        const base = await ctx.db.base.create({
+          data: {
+            id: input.id,
+            name: input.name,
+            workspaceId: input.workspaceId,
+          },
+        });
 
-      return base;
+        return base;
+      } catch (error) {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          (error as { code?: string }).code === "P2002"
+          ) {
+          const conflictedBase = await ctx.db.base.findUnique({
+            where: { id: input.id },
+          });
+
+          if (conflictedBase) {
+            if (conflictedBase.workspaceId === input.workspaceId) {
+              return conflictedBase;
+            }
+
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: "Base already exists in another workspace",
+            });
+          }
+        }
+
+        throw error;
+      }
     }),
 
-  /**
-   * Update an existing base
-   */
   update: protectedProcedure
     .input(
       z.object({
@@ -112,7 +125,6 @@ export const baseRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
 
-      // Verify that the base belongs to a workspace owned by the user
       const existingBase = await ctx.db.base.findFirst({
         where: {
           id: input.id,
@@ -141,9 +153,6 @@ export const baseRouter = createTRPCRouter({
       return base;
     }),
 
-  /**
-   * Delete a base
-   */
   delete: protectedProcedure
     .input(
       z.object({
@@ -153,7 +162,6 @@ export const baseRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
 
-      // Verify that the base belongs to a workspace owned by the user
       const existingBase = await ctx.db.base.findFirst({
         where: {
           id: input.id,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import {
   useReactTable,
@@ -56,34 +56,32 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
 
   const backendSync = useTableBackendSync();
 
-  // ✅ Infinite rows source (pagination / lazy loading)
-  // Load this first to get totalCount before deciding whether to disable full load
   const PAGE_SIZE = 200;
 
+  // 当前窗口起始 offset（只对大表有意义，小表固定为 0）
+  const [windowOffset, setWindowOffset] = useState(0);
+
+  // 当切换表时重置窗口到顶部
+  useEffect(() => {
+    setWindowOffset(0);
+  }, [currentTableId]);
+
+  // 使用 loadInfinite 作为“按 offset 取一页窗口”的 API
   const {
-    data: infiniteData,
+    data: windowPage,
     isLoading: isLoadingRows,
-    isFetchingNextPage,
-    hasNextPage,
-    fetchNextPage,
-  } = api.tableData.loadInfinite.useInfiniteQuery(
-    { tableId: currentTableId, limit: PAGE_SIZE },
+  } = api.tableData.loadInfinite.useQuery(
+    { tableId: currentTableId, limit: PAGE_SIZE, cursor: windowOffset },
     {
       enabled: !!currentTableId,
-      getNextPageParam: (lastPage) => lastPage.nextCursor,
-      // 你也可以先关掉 refetchOnWindowFocus，避免录 demo 时抖动
       refetchOnWindowFocus: false,
     }
   );
 
-  // ✅ total row count for UI display (and virtualizer count)
-  const totalCount = infiniteData?.pages?.[0]?.totalCount ?? 0;
+  const totalCount = windowPage?.totalCount ?? 0;
 
-  // ✅ Determine if this is a large table (to disable full load in useTableStore)
-  // For large tables, we skip loadData() and rely on loadInfinite() instead
   const isLargeTable = totalCount > LARGE_TABLE_THRESHOLD;
 
-  // 使用统一的 TableStore 管理所有状态
   const {
     currentData,
     currentTableColumns,
@@ -100,32 +98,31 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
     disableRowLoad: isLargeTable,
   });
 
-  // ✅ Only the loaded rows are used as table data
   const flatRows = useMemo(() => {
-    return infiniteData?.pages.flatMap((p) => p.rows) ?? [];
-  }, [infiniteData]);
-
-  // ✅ Get columns from infinite query (preferred) or fallback to store
-  const tableColumns = useMemo(() => {
-    const infiniteColumns = infiniteData?.pages?.[0]?.columns;
-    if (infiniteColumns && infiniteColumns.length > 0) {
-      return infiniteColumns;
+    if (isLargeTable) {
+      return windowPage?.rows ?? [];
     }
-    return currentTableColumns;
-  }, [infiniteData?.pages, currentTableColumns]);
+    return currentData;
+  }, [windowPage, currentData, isLargeTable]);
 
-  // 包装 async setData 为同步函数，以兼容 createTableColumns 的接口
-  // createTableColumns 期望 onSetData: (data: TableRow[]) => void
+  const tableColumns = useMemo(() => {
+    const windowColumns = windowPage?.columns;
+
+    if (isLargeTable && windowColumns && windowColumns.length > 0) {
+      return windowColumns;
+    }
+
+    return currentTableColumns;
+  }, [windowPage, currentTableColumns, isLargeTable]);
+
   const handleSetData = useMemo(() => {
     return (newData: TableRow[]) => {
-      // 忽略 Promise，保持同步接口
       storeSetData(newData).catch((error) => {
         console.error("Failed to set data:", error);
       });
     };
   }, [storeSetData]);
 
-  // 包装 async addRow 为同步函数
   const handleAddRow = useMemo(() => {
     return () => {
       storeAddRow().catch((error) => {
@@ -134,7 +131,6 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
     };
   }, [storeAddRow]);
 
-  // 包装 async addColumn 为同步函数
   const handleAddColumn = useMemo(() => {
     return (data: { name: string; type: "text" | "number"; defaultValue?: string }) => {
       storeAddColumn(data).catch((error) => {
@@ -151,7 +147,6 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
     };
   }, [storeUpdateCell]);
 
-  // ✅ Create a getCellValue that reads from flatRows (infinite query data) first, then cellsMap
   const getCellValueFromRows = useMemo(() => {
     return (rowId: string, colId: string, colType: "text" | "number") => {
       // First try to get from flatRows (infinite query data)
@@ -219,11 +214,10 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
             onAddColumn={handleAddColumn} 
             tableId={currentTableId}
             totalCount={totalCount}
-            loadedCount={flatRows.length}
-            fetchNextPage={fetchNextPage}
-            hasNextPage={!!hasNextPage}
-            isFetchingNextPage={isFetchingNextPage}
-            isLoadingRows={isLoadingRows}
+            isLargeTable={isLargeTable}
+            windowOffset={windowOffset}
+            pageSize={PAGE_SIZE}
+            onWindowOffsetChange={setWindowOffset}
           />
 
           <TableBottomBar recordCount={totalCount || flatRows.length} onAddRow={handleAddRow} />

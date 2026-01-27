@@ -1,9 +1,3 @@
-/**
- * Backend sync hook: implements BackendSync for useTableStore.
- * Loads/saves table rows, columns, and cells via tRPC tableData router.
- * Kept in a separate module for backend connection concerns.
- */
-
 "use client";
 
 import { useCallback, useMemo } from "react";
@@ -16,7 +10,8 @@ export type BackendSync = {
   syncData: (tableId: string, data: TableRow[]) => Promise<void>;
   syncColumns: (tableId: string, columns: Column[]) => Promise<void>;
   syncCell: (tableId: string, rowId: string, columnId: string, value: string | number | null) => Promise<void>;
-  prefetchData?: (tableId: string) => void; // Optional: prefetch for hover optimization
+  appendRow: (tableId: string, rowId: string) => Promise<void>;
+  prefetchData?: (tableId: string) => void;
 };
 
 export function useTableBackendSync(): BackendSync {
@@ -24,6 +19,7 @@ export function useTableBackendSync(): BackendSync {
   const syncDataMut = api.tableData.syncData.useMutation();
   const syncColumnsMut = api.tableData.syncColumns.useMutation();
   const syncCellMut = api.tableData.syncCell.useMutation();
+  const appendRowMut = api.tableData.appendRow.useMutation();
 
   const loadData = useCallback(
     async (tableId: string): Promise<TableRow[]> => {
@@ -67,10 +63,16 @@ export function useTableBackendSync(): BackendSync {
     [syncCellMut]
   );
 
-  // Prefetch data on hover for instant loading (optional optimization)
+  const appendRow = useCallback(
+    async (tableId: string, rowId: string): Promise<void> => {
+      await appendRowMut.mutateAsync({ tableId, rowId });
+      await utils.tableData.loadInfinite.invalidate({ tableId });
+    },
+    [appendRowMut, utils.tableData.loadInfinite]
+  );
+
   const prefetchData = useCallback(
     (tableId: string) => {
-      // Prefetch without awaiting - fire and forget for hover optimization
       void utils.tableData.load.prefetch({ tableId });
     },
     [utils.tableData.load]
@@ -83,8 +85,9 @@ export function useTableBackendSync(): BackendSync {
       syncData,
       syncColumns,
       syncCell,
+      appendRow,
       prefetchData,
     }),
-    [loadData, loadColumns, syncData, syncColumns, syncCell, prefetchData]
+    [loadData, loadColumns, syncData, syncColumns, syncCell, appendRow, prefetchData]
   );
 }

@@ -8,6 +8,7 @@ import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import { type ColumnType } from "../../../../generated/prisma";
 import { randomBytes } from "crypto";
+import { faker } from "@faker-js/faker";
 
 const tableIdSchema = z
   .string()
@@ -330,6 +331,50 @@ export const tableDataRouter = createTRPCRouter({
     }),
 
   /**
+   * Append a single row at the end of the table.
+   * Used by "large table" mode to avoid full-table syncs.
+   */
+  appendRow: protectedProcedure
+    .input(
+      z.object({
+        tableId: tableIdSchema,
+        rowId: z.string().min(1),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const owned = await ctx.db.dataTable.findFirst({
+        where: {
+          id: input.tableId,
+          base: { workspace: { ownerId: ctx.session.user.id } },
+        },
+      });
+      if (!owned) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Table not found or you don't have permission",
+        });
+      }
+
+      // Find current max order to append after it
+      const maxOrderRow = await ctx.db.tableRow.findFirst({
+        where: { tableId: input.tableId },
+        orderBy: { order: "desc" },
+        select: { order: true },
+      });
+      const nextOrder = maxOrderRow ? maxOrderRow.order + BigInt(1000) : BigInt(1000);
+
+      await ctx.db.tableRow.create({
+        data: {
+          id: input.rowId,
+          tableId: input.tableId,
+          order: nextOrder,
+        },
+      });
+
+      return { ok: true };
+    }),
+
+  /**
    * Add 100k rows to a table (bulk insert)
    */
   addBulkRows: protectedProcedure
@@ -398,18 +443,44 @@ export const tableDataRouter = createTRPCRouter({
           data: rows,
         });
 
-        // Insert cells for all rows in this batch
+        // Insert cells for all rows in this batch, using faker to generate fake values
         const cellInserts = [];
         for (const row of rows) {
           for (const col of dbColumns) {
             const valueType = col.type as ColumnType;
+
+            let valueText: string | null = null;
+            let valueNumber: number | null = null;
+
+            if (valueType === "text") {
+              const key = col.key.toLowerCase();
+
+              if (key.includes("name")) {
+                valueText = faker.person.fullName();
+              } else if (key.includes("email")) {
+                valueText = faker.internet.email();
+              } else if (key.includes("city")) {
+                valueText = faker.location.city();
+              } else if (key.includes("country")) {
+                valueText = faker.location.country();
+              } else if (key.includes("company")) {
+                valueText = faker.company.name();
+              } else {
+                // Fallback: short lorem text
+                valueText = faker.lorem.words({ min: 1, max: 4 });
+              }
+            } else if (valueType === "number") {
+              // Reasonable numeric range for demo/testing
+              valueNumber = faker.number.int({ min: 0, max: 10000 });
+            }
+
             cellInserts.push({
               tableId: input.tableId,
               rowId: row.id,
               columnId: col.id,
               valueType,
-              valueText: valueType === "text" ? "" : null,
-              valueNumber: valueType === "number" ? null : null,
+              valueText,
+              valueNumber,
             });
           }
         }

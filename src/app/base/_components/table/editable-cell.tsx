@@ -37,24 +37,17 @@ export function EditableCell({
   const isEditingRef = useRef(isEditing);
   const lastSyncedValueRef = useRef<string>(valueToString(value));
 
-  // Update ref when isEditing changes
   useEffect(() => {
     isEditingRef.current = isEditing;
   }, [isEditing]);
 
-  // Only sync value prop to editValue when:
-  // 1. Not currently editing (user finished editing)
-  // 2. Value changed externally (not from our own input)
   useEffect(() => {
-    // Don't update if user is currently editing - this prevents input interruption
     if (isEditingRef.current) {
-      // Still update the ref so we know what the external value is
       lastSyncedValueRef.current = valueToString(value);
       return;
     }
     
     const newValueStr = valueToString(value);
-    // Only update if value actually changed and it's different from what we have
     if (newValueStr !== editValue && newValueStr !== lastSyncedValueRef.current) {
       setEditValue(newValueStr);
       lastSyncedValueRef.current = newValueStr;
@@ -93,12 +86,10 @@ export function EditableCell({
       processedValue = editValue;
     }
     
-    // Only call onChange if value actually changed (avoid unnecessary updates)
     const currentValueStr = valueToString(value);
     const newValueStr = valueToString(processedValue);
     
     if (currentValueStr !== newValueStr) {
-      // Update ref to track what we just synced
       lastSyncedValueRef.current = newValueStr;
       onChange(processedValue);
     }
@@ -138,27 +129,19 @@ export function EditableCell({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>) => {
-    // Handle Enter key
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       
-      // For textarea, Shift+Enter creates new line, Enter alone should save and move down
-      // For input (number), Enter always saves and moves down
       if (columnType === "text" && e.shiftKey) {
-        // Shift+Enter: allow new line in textarea (default behavior)
         return;
       }
       
-      // Save current value first (this will trigger onChange and onStopEditing)
       const currentRef = columnType === "number" ? inputRef.current : textareaRef.current;
       if (currentRef) {
         currentRef.blur();
       }
       
-      // Then move to next row (down) if onArrowKey is provided
-      // This matches Excel/Airtable behavior: Enter saves and moves down
       if (onArrowKey) {
-        // Small delay to ensure blur and save complete before navigation
         requestAnimationFrame(() => {
           onArrowKey("down");
         });
@@ -166,15 +149,11 @@ export function EditableCell({
       return;
     }
     
-    // Handle Escape key
     if (e.key === "Escape") {
       setEditValue(valueToString(value));
       (columnType === "number" ? inputRef.current : textareaRef.current)?.blur();
       return;
     }
-
-    // Note: Delete/Backspace are handled normally by handleChange
-    // They don't trigger boundary checks, so they won't cause cell navigation
 
     if (columnType === "number") {
       const allowedKeys = [
@@ -237,18 +216,15 @@ export function EditableCell({
 
       if (isAtBoundary && direction) {
         e.preventDefault();
-        // Save current value before moving (only if changed)
         const currentValueStr = valueToString(value);
         const editValueStr = editValue.trim();
         if (currentValueStr !== editValueStr) {
           handleBlur();
         } else {
-          // Value unchanged, just stop editing without triggering onChange
           if (onStopEditing) {
             onStopEditing();
           }
         }
-        // Use requestAnimationFrame to ensure smooth transition
         requestAnimationFrame(() => {
           onArrowKey(direction);
         });

@@ -13,11 +13,10 @@ type TableGridProps = {
   onAddColumn?: (data: { name: string; type: ColumnType; defaultValue?: string }) => void;
   tableId?: string;
   totalCount: number;
-  loadedCount: number;
-  fetchNextPage: () => void;
-  hasNextPage: boolean;
-  isFetchingNextPage: boolean;
-  isLoadingRows: boolean;
+  isLargeTable?: boolean;
+  windowOffset?: number;
+  pageSize?: number;
+  onWindowOffsetChange?: (offset: number) => void;
 };
 
 type SelectedCell = {
@@ -31,26 +30,22 @@ export function TableGrid({
   onAddColumn, 
   tableId,
   totalCount,
-  loadedCount,
-  fetchNextPage,
-  hasNextPage,
-  isFetchingNextPage,
-  isLoadingRows,
+  isLargeTable,
+  windowOffset = 0,
+  pageSize = 200,
+  onWindowOffsetChange,
 }: TableGridProps) {
   const [selectedCell, setSelectedCell] = useState<SelectedCell>(null);
   const [editingCell, setEditingCell] = useState<SelectedCell>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const tbodyRef = useRef<HTMLTableSectionElement>(null);
 
-  // Use virtualization for large datasets (> 100 rows)
-  // For small datasets, use regular rendering for better performance and simplicity
   const rowCount = table.getRowModel().rows.length;
-  const shouldUseVirtualization = totalCount > 100; // Use virtualization for large datasets
+  const shouldUseVirtualization = totalCount > 100;
   
   // Use totalCount from props (single source of truth)
   const totalRowCount = totalCount;
 
-  // Create a virtual row model for the visible rows (only for large datasets)
   const rowVirtualizer = useVirtualizer({
     count: shouldUseVirtualization ? totalRowCount : 0,
     getScrollElement: () => tableContainerRef.current,
@@ -59,28 +54,42 @@ export function TableGrid({
     enabled: shouldUseVirtualization,
   });
 
-  // Load more when scrolling near the end (using props from parent)
   useEffect(() => {
-    if (!shouldUseVirtualization) return;
-    
-    const [lastItem] = [...rowVirtualizer.getVirtualItems()].reverse();
-    if (!lastItem) return;
-    
-    // Trigger load when scrolling within 5 rows of the loaded data
-    if (
-      lastItem.index >= loadedCount - 5 &&
-      hasNextPage &&
-      !isFetchingNextPage
-    ) {
-      fetchNextPage();
+    if (!shouldUseVirtualization || !isLargeTable || !onWindowOffsetChange) return;
+
+    const items = rowVirtualizer.getVirtualItems();
+    if (!items.length) return;
+
+    const firstIndex = items[0]!.index;
+    const lastIndex = items[items.length - 1]!.index;
+    const centerIndex = Math.floor((firstIndex + lastIndex) / 2);
+
+    const currentStart = windowOffset;
+
+    // 只有当视窗中心明显跑出当前窗口的中间区域时才切换，避免频繁请求
+    const lowerBound = currentStart + pageSize * 0.25;
+    const upperBound = currentStart + pageSize * 0.75;
+
+    if (centerIndex < lowerBound || centerIndex > upperBound) {
+      const halfPage = Math.floor(pageSize / 2);
+      let nextStart = Math.max(0, centerIndex - halfPage);
+      // 避免超出总行数
+      if (totalRowCount > 0) {
+        nextStart = Math.min(nextStart, Math.max(0, totalRowCount - pageSize));
+      }
+
+      if (nextStart !== currentStart) {
+        onWindowOffsetChange(nextStart);
+      }
     }
   }, [
     shouldUseVirtualization,
-    hasNextPage,
-    isFetchingNextPage,
-    fetchNextPage,
-    loadedCount,
-    rowVirtualizer.getVirtualItems(),
+    isLargeTable,
+    onWindowOffsetChange,
+    totalRowCount,
+    windowOffset,
+    pageSize,
+    rowVirtualizer,
   ]);
 
   const handleCellClick = (rowIndex: number, columnId: string) => {
@@ -120,10 +129,6 @@ export function TableGrid({
         break;
       case "down":
         newRowIndex = Math.min(totalRowCount - 1, fromRowIndex + 1);
-        // Load more if needed (using props from parent)
-        if (newRowIndex >= loadedCount - 5 && hasNextPage && !isFetchingNextPage) {
-          fetchNextPage();
-        }
         break;
       case "left":
         newColIndex = Math.max(0, currentColIndex - 1);
@@ -266,7 +271,10 @@ export function TableGrid({
             ) : (
               rowsToRender.map((rowInfo) => {
                 const rowIndex = rowInfo.index;
-                const tableRow = table.getRowModel().rows[rowIndex];
+                const logicalIndex = shouldUseVirtualization && isLargeTable
+                  ? rowIndex - windowOffset
+                  : rowIndex;
+                const tableRow = table.getRowModel().rows[logicalIndex];
                 
                 // If row doesn't exist yet (still loading), show placeholder
                 if (!tableRow) {

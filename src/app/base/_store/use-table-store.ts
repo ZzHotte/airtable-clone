@@ -1,17 +1,8 @@
-/**
- * Table state management store
- * Centralized state management with backend sync interface
- */
-
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { genColumnId, genRowId } from "../_utils/id-generator";
 
-// TableRow type: optimized to only store row skeleton (id)
-// Cell values are read directly from cellsMap in render
 export type TableRow = {
   id: string;
-  // Note: Cell values are no longer stored here to avoid O(rows×cols) recalculation
-  // Access cell values via getCellValue(rowId, colId) or cellsMap[rowId][colId]
 };
 
 export type Column = {
@@ -21,9 +12,6 @@ export type Column = {
 };
 
 export type CellValue = string | number | null;
-
-// Optimized nested structure: tableId -> rowId -> colId -> value
-// This allows O(1) updates per cell without copying entire table
 export type CellsMap = {
   [tableId: string]: {
     [rowId: string]: {
@@ -43,6 +31,7 @@ type BackendSync = {
   loadData?: (tableId: string) => Promise<TableRow[]>;
   loadColumns?: (tableId: string) => Promise<Column[]>;
   syncCell?: (tableId: string, rowId: string, columnId: string, value: string | number | null) => Promise<void>;
+  appendRow?: (tableId: string, rowId: string) => Promise<void>;
 };
 
 type UseTableStoreProps = {
@@ -64,13 +53,11 @@ export function useTableStore({
   const [selectedCell, setSelectedCell] = useState<SelectedCell>(null);
   const [editingCell, setEditingCell] = useState<SelectedCell>(null);
 
-  // Get cells map for current table (nested structure: rowId -> colId -> value)
   const cellsMap = useMemo(
     () => (activeTableId ? cellsMapState[activeTableId] ?? {} : {}),
     [activeTableId, cellsMapState]
   );
 
-  // Helper: Get cell value from nested structure
   const getCellValue = useCallback(
     (rowId: string, colId: string, colType: "text" | "number"): CellValue => {
       if (!activeTableId) return colType === "number" ? null : "";
@@ -100,8 +87,6 @@ export function useTableStore({
     return getDefaultColumns();
   }, [activeTableId, tableColumnsMap, getDefaultColumns]);
 
-  // Optimized: data only stores row skeletons, cells are read on-demand
-  // This prevents O(rows×cols) recalculation on every cell update
   const currentData = useMemo(() => {
     if (!activeTableId) return [];
     const data = tableDataMap[activeTableId];
@@ -110,18 +95,13 @@ export function useTableStore({
     return data.map((row) => ({ id: row.id }));
   }, [activeTableId, tableDataMap]);
 
-  // Helper: Sync TableRow[] data to cellsMap (nested structure)
-  // Only used for initial load or bulk updates (not on every cell edit)
-  // rows can be either TableRow[] (skeleton) or full data with cell values
   const syncRowsToCellsMap = useCallback(
     (tableId: string, rows: (TableRow | { id: string; [key: string]: string | number | null })[], columns: Column[]) => {
       if (columns.length === 0) return;
-      
       setCellsMapState((prev) => {
         const tableMap = prev[tableId] ?? {};
         const updatedTableMap: { [rowId: string]: { [colId: string]: CellValue } } = { ...tableMap };
 
-        // Build nested structure: rowId -> colId -> value
         for (const row of rows) {
           if (!row.id) continue;
           const rowMap = updatedTableMap[row.id] ?? {};
@@ -146,7 +126,6 @@ export function useTableStore({
     async (newData: TableRow[]) => {
       if (!activeTableId) return;
 
-      // Only update row list - don't rebuild cellsMap (cells are managed separately)
       setTableDataMap((prev) => ({
         ...prev,
         [activeTableId]: newData.map((row) => ({ id: row.id })),
@@ -156,9 +135,11 @@ export function useTableStore({
         externalSetData(newData);
       }
 
-      if (backendSync?.syncData) {
+      // Sync strategy:
+      // - Small tables: allow full-table sync (syncData) for simplicity
+      // - Large tables (disableRowLoad=true): forbid full-table sync, rely on per-cell sync instead
+      if (!disableRowLoad && backendSync?.syncData) {
         try {
-          // Build full data for backend sync (include cell values from cellsMap)
           const fullData = newData.map((row) => {
             const rowMap = cellsMapState[activeTableId]?.[row.id] ?? {};
             const rowData: { id: string; [key: string]: string | number | null } = { id: row.id };
@@ -173,7 +154,7 @@ export function useTableStore({
         }
       }
     },
-    [activeTableId, externalSetData, backendSync, currentTableColumns, cellsMapState]
+    [activeTableId, externalSetData, backendSync, currentTableColumns, cellsMapState, disableRowLoad]
   );
 
   const addRow = useCallback(async () => {
@@ -183,13 +164,11 @@ export function useTableStore({
     const newRow: TableRow = { id: newRowId };
     const newData = [...currentData, newRow];
 
-    // Initialize cells for new row first (before updating row list)
     const newRowMap: { [colId: string]: CellValue } = {};
     for (const col of currentTableColumns) {
       newRowMap[col.id] = col.type === "number" ? null : "";
     }
 
-    // Update both row list and cells map
     setTableDataMap((prev) => ({
       ...prev,
       [activeTableId]: newData,
@@ -206,11 +185,9 @@ export function useTableStore({
       };
     });
 
-    if (backendSync?.syncData) {
+    if (!disableRowLoad && backendSync?.syncData) {
       try {
-        // Build data for backend sync using the new row map we just created
         const fullData = newData.map((row) => {
-          // Use the newRowMap for the new row, otherwise get from state
           const rowMap = row.id === newRowId 
             ? newRowMap 
             : (cellsMapState[activeTableId]?.[row.id] ?? {});
@@ -223,24 +200,26 @@ export function useTableStore({
         await backendSync.syncData(activeTableId, fullData);
       } catch (error) {
         console.error("Failed to sync new row to backend:", error);
-        // Don't revert on error - keep the row in UI even if sync fails
+      }
+    } else if (disableRowLoad && backendSync?.appendRow) {
+      try {
+        await backendSync.appendRow(activeTableId, newRowId);
+      } catch (error) {
+        console.error("Failed to append new row to backend (large table mode):", error);
       }
     }
-  }, [activeTableId, currentData, currentTableColumns, cellsMapState, backendSync]);
+  }, [activeTableId, currentData, currentTableColumns, cellsMapState, backendSync, disableRowLoad]);
 
   const updateCell = useCallback(
     async (rowId: string, columnId: string, value: string | number | null) => {
       if (!activeTableId) return;
 
-      // Optimized: Only update the specific cell in nested structure (O(1) update)
       setCellsMapState((prev) => {
         const tableMap = prev[activeTableId] ?? {};
         const rowMap = tableMap[rowId] ?? {};
         
-        // Skip if value unchanged
         if (rowMap[columnId] === value) return prev;
         
-        // Only copy the affected row, not entire table
         const updatedRowMap = { ...rowMap, [columnId]: value };
         const updatedTableMap = { ...tableMap, [rowId]: updatedRowMap };
         
@@ -296,12 +275,10 @@ export function useTableStore({
         ? (data.defaultValue ? parseFloat(data.defaultValue) || null : null)
         : (data.defaultValue || "");
 
-      // Only update cells for new column (not entire table rebuild)
       setCellsMapState((prev) => {
         const tableMap = prev[activeTableId] ?? {};
         const updatedTableMap: typeof tableMap = {};
         
-        // For each row, add the new column's default value
         for (const row of currentData) {
           const rowMap = tableMap[row.id] ?? {};
           updatedTableMap[row.id] = {
@@ -319,9 +296,8 @@ export function useTableStore({
         };
       });
 
-      if (backendSync?.syncData) {
+      if (!disableRowLoad && backendSync?.syncData) {
         try {
-          // Build full data for backend sync
           const fullData = currentData.map((row) => {
             const rowMap = cellsMapState[activeTableId]?.[row.id] ?? {};
             const rowData: { id: string; [key: string]: string | number | null } = { id: row.id };
@@ -336,7 +312,7 @@ export function useTableStore({
         }
       }
     },
-    [activeTableId, currentTableColumns, currentData, setColumns, cellsMapState, backendSync]
+    [activeTableId, currentTableColumns, currentData, setColumns, cellsMapState, backendSync, disableRowLoad]
   );
 
   const setSelected = useCallback((cell: SelectedCell) => {
@@ -352,13 +328,10 @@ export function useTableStore({
     setEditingCell(null);
   }, []);
 
-  // Load table data from backend when activeTableId changes
-  // Use refs to track state and prevent infinite loops
   const lastLoadedTableIdRef = useRef<string | null>(null);
   const loadDataRef = useRef(backendSync?.loadData);
   const loadColumnsRef = useRef(backendSync?.loadColumns);
   
-  // Update refs when backendSync functions change (but don't trigger load effect)
   useEffect(() => {
     loadDataRef.current = backendSync?.loadData;
     loadColumnsRef.current = backendSync?.loadColumns;
@@ -366,12 +339,10 @@ export function useTableStore({
   
   useEffect(() => {
     if (!activeTableId || !loadDataRef.current || !loadColumnsRef.current) {
-      // Reset ref when no table is active
       lastLoadedTableIdRef.current = null;
       return;
     }
     
-    // Skip if we've already loaded this table
     if (lastLoadedTableIdRef.current === activeTableId) return;
 
     let cancelled = false;
@@ -380,46 +351,23 @@ export function useTableStore({
         let rows: TableRow[] = [];
         const columns = await loadColumnsRef.current!(activeTableId);
         
-        // Only load full row data if not disabled (for large tables, use loadInfinite instead)
         if (!disableRowLoad && loadDataRef.current) {
           rows = await loadDataRef.current(activeTableId);
         }
 
         if (cancelled) return;
         
-        // Mark as loaded before updating state to prevent re-triggering
         lastLoadedTableIdRef.current = activeTableId;
         
-        // Update columns (always needed)
         setTableColumnsMap((prev) => ({ ...prev, [activeTableId]: columns }));
         
-        // Only update rows and sync to cellsMap if we loaded data
-        // For large tables (disableRowLoad=true), rows will be empty and data comes from loadInfinite
         if (!disableRowLoad && rows.length > 0) {
           setTableDataMap((prev) => ({ ...prev, [activeTableId]: rows }));
           if (columns.length > 0) {
-            // Debug: log loaded data
-            if (process.env.NODE_ENV === "development") {
-              console.log("[useTableStore] Loaded data:", {
-                tableId: activeTableId,
-                rowsCount: rows.length,
-                columnsCount: columns.length,
-                sampleRow: rows[0],
-                sampleColumns: columns.slice(0, 3),
-              });
-            }
             syncRowsToCellsMap(activeTableId, rows, columns);
           }
         } else if (disableRowLoad) {
-          // For large tables, we still need to initialize empty row list
-          // Rows will be loaded via loadInfinite in table-spaces.tsx
           setTableDataMap((prev) => ({ ...prev, [activeTableId]: [] }));
-          if (process.env.NODE_ENV === "development") {
-            console.log("[useTableStore] Skipped full row load for large table:", {
-              tableId: activeTableId,
-              columnsCount: columns.length,
-            });
-          }
         }
       } catch (error) {
         if (!cancelled) console.error("Failed to load table data from backend:", error);
