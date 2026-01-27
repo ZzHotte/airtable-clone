@@ -3,7 +3,6 @@
 import { useState, useRef, useMemo, useEffect } from "react";
 import { flexRender, type Table } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { api } from "~/trpc/react";
 import type { TableRow } from "../../_store/use-table-store";
 import { AddColumnButton } from "./add-column-button";
 import type { ColumnType } from "./add-column-modal";
@@ -13,6 +12,12 @@ type TableGridProps = {
   onAddRow: () => void;
   onAddColumn?: (data: { name: string; type: ColumnType; defaultValue?: string }) => void;
   tableId?: string;
+  totalCount: number;
+  loadedCount: number;
+  fetchNextPage: () => void;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  isLoadingRows: boolean;
 };
 
 type SelectedCell = {
@@ -20,36 +25,30 @@ type SelectedCell = {
   columnId: string;
 } | null;
 
-export function TableGrid({ table, onAddRow, onAddColumn, tableId }: TableGridProps) {
+export function TableGrid({ 
+  table, 
+  onAddRow, 
+  onAddColumn, 
+  tableId,
+  totalCount,
+  loadedCount,
+  fetchNextPage,
+  hasNextPage,
+  isFetchingNextPage,
+  isLoadingRows,
+}: TableGridProps) {
   const [selectedCell, setSelectedCell] = useState<SelectedCell>(null);
   const [editingCell, setEditingCell] = useState<SelectedCell>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const tbodyRef = useRef<HTMLTableSectionElement>(null);
 
-  // Use infinite query and virtualization only for large datasets (> 100 rows)
+  // Use virtualization for large datasets (> 100 rows)
   // For small datasets, use regular rendering for better performance and simplicity
   const rowCount = table.getRowModel().rows.length;
-  const shouldUseInfinite = !!tableId && rowCount > 100;
-  const shouldUseVirtualization = rowCount > 100; // Use virtualization for large datasets
+  const shouldUseVirtualization = totalCount > 100; // Use virtualization for large datasets
   
-  const infiniteQuery = api.tableData.loadInfinite.useInfiniteQuery(
-    {
-      tableId: tableId!,
-      limit: 100,
-    },
-    {
-      enabled: shouldUseInfinite,
-      getNextPageParam: (lastPage) => lastPage.nextCursor,
-    }
-  );
-
-  // Get total count for virtualization
-  const totalRowCount = useMemo(() => {
-    if (shouldUseInfinite && infiniteQuery.data) {
-      return infiniteQuery.data.pages[0]?.totalCount ?? rowCount;
-    }
-    return rowCount;
-  }, [shouldUseInfinite, infiniteQuery.data, rowCount]);
+  // Use totalCount from props (single source of truth)
+  const totalRowCount = totalCount;
 
   // Create a virtual row model for the visible rows (only for large datasets)
   const rowVirtualizer = useVirtualizer({
@@ -60,28 +59,27 @@ export function TableGrid({ table, onAddRow, onAddColumn, tableId }: TableGridPr
     enabled: shouldUseVirtualization,
   });
 
-  // Load more when scrolling near the end
+  // Load more when scrolling near the end (using props from parent)
   useEffect(() => {
-    if (!shouldUseInfinite) return;
+    if (!shouldUseVirtualization) return;
     
     const [lastItem] = [...rowVirtualizer.getVirtualItems()].reverse();
     if (!lastItem) return;
-
-    const loadedRows = infiniteQuery.data?.pages.flatMap((page) => page.rows).length ?? 0;
     
+    // Trigger load when scrolling within 5 rows of the loaded data
     if (
-      lastItem.index >= loadedRows - 5 &&
-      infiniteQuery.hasNextPage &&
-      !infiniteQuery.isFetchingNextPage
+      lastItem.index >= loadedCount - 5 &&
+      hasNextPage &&
+      !isFetchingNextPage
     ) {
-      infiniteQuery.fetchNextPage();
+      fetchNextPage();
     }
   }, [
-    shouldUseInfinite,
-    infiniteQuery.hasNextPage,
-    infiniteQuery.isFetchingNextPage,
-    infiniteQuery.fetchNextPage,
-    infiniteQuery.data,
+    shouldUseVirtualization,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+    loadedCount,
     rowVirtualizer.getVirtualItems(),
   ]);
 
@@ -122,12 +120,9 @@ export function TableGrid({ table, onAddRow, onAddColumn, tableId }: TableGridPr
         break;
       case "down":
         newRowIndex = Math.min(totalRowCount - 1, fromRowIndex + 1);
-        // Load more if needed
-        if (shouldUseInfinite) {
-          const loadedRows = infiniteQuery.data?.pages.flatMap((page) => page.rows).length ?? 0;
-          if (newRowIndex >= loadedRows - 5 && infiniteQuery.hasNextPage && !infiniteQuery.isFetchingNextPage) {
-            infiniteQuery.fetchNextPage();
-          }
+        // Load more if needed (using props from parent)
+        if (newRowIndex >= loadedCount - 5 && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
         }
         break;
       case "left":
@@ -197,14 +192,8 @@ export function TableGrid({ table, onAddRow, onAddColumn, tableId }: TableGridPr
       ? totalSize - (virtualRows[virtualRows.length - 1]?.end ?? 0)
       : 0;
 
-  // Get all loaded rows from infinite query or table
-  const allLoadedRows = useMemo(() => {
-    if (shouldUseInfinite && infiniteQuery.data) {
-      return infiniteQuery.data.pages.flatMap((page) => page.rows);
-    }
-    // For regular rendering, return table rows
-    return table.getRowModel().rows.map((row) => row.original);
-  }, [shouldUseInfinite, infiniteQuery.data, table]);
+  // All rows come from table prop (single source of truth from parent)
+  // No need to compute allLoadedRows separately
 
   // Get headers for column rendering
   const headers = table.getHeaderGroups()[0]?.headers || [];

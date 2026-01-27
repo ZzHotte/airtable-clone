@@ -49,12 +49,14 @@ type UseTableStoreProps = {
   activeTableId: string | null;
   externalSetData?: (data: TableRow[]) => void;
   backendSync?: BackendSync;
+  disableRowLoad?: boolean; 
 };
 
 export function useTableStore({ 
   activeTableId, 
   externalSetData,
-  backendSync 
+  backendSync,
+  disableRowLoad = false,
 }: UseTableStoreProps) {
   const [tableDataMap, setTableDataMap] = useState<Record<string, TableRow[]>>({});
   const [tableColumnsMap, setTableColumnsMap] = useState<Record<string, Column[]>>({});
@@ -375,31 +377,49 @@ export function useTableStore({
     let cancelled = false;
     void (async () => {
       try {
-        const [rows, columns] = await Promise.all([
-          loadDataRef.current!(activeTableId),
-          loadColumnsRef.current!(activeTableId),
-        ]);
+        let rows: TableRow[] = [];
+        const columns = await loadColumnsRef.current!(activeTableId);
+        
+        // Only load full row data if not disabled (for large tables, use loadInfinite instead)
+        if (!disableRowLoad && loadDataRef.current) {
+          rows = await loadDataRef.current(activeTableId);
+        }
+
         if (cancelled) return;
         
         // Mark as loaded before updating state to prevent re-triggering
         lastLoadedTableIdRef.current = activeTableId;
         
-        setTableDataMap((prev) => ({ ...prev, [activeTableId]: rows }));
+        // Update columns (always needed)
         setTableColumnsMap((prev) => ({ ...prev, [activeTableId]: columns }));
         
-        // Only sync to cellsMap if we have columns
-        if (columns.length > 0) {
-          // Debug: log loaded data
+        // Only update rows and sync to cellsMap if we loaded data
+        // For large tables (disableRowLoad=true), rows will be empty and data comes from loadInfinite
+        if (!disableRowLoad && rows.length > 0) {
+          setTableDataMap((prev) => ({ ...prev, [activeTableId]: rows }));
+          if (columns.length > 0) {
+            // Debug: log loaded data
+            if (process.env.NODE_ENV === "development") {
+              console.log("[useTableStore] Loaded data:", {
+                tableId: activeTableId,
+                rowsCount: rows.length,
+                columnsCount: columns.length,
+                sampleRow: rows[0],
+                sampleColumns: columns.slice(0, 3),
+              });
+            }
+            syncRowsToCellsMap(activeTableId, rows, columns);
+          }
+        } else if (disableRowLoad) {
+          // For large tables, we still need to initialize empty row list
+          // Rows will be loaded via loadInfinite in table-spaces.tsx
+          setTableDataMap((prev) => ({ ...prev, [activeTableId]: [] }));
           if (process.env.NODE_ENV === "development") {
-            console.log("[useTableStore] Loaded data:", {
+            console.log("[useTableStore] Skipped full row load for large table:", {
               tableId: activeTableId,
-              rowsCount: rows.length,
               columnsCount: columns.length,
-              sampleRow: rows[0],
-              sampleColumns: columns.slice(0, 3),
             });
           }
-          syncRowsToCellsMap(activeTableId, rows, columns);
         }
       } catch (error) {
         if (!cancelled) console.error("Failed to load table data from backend:", error);
@@ -408,7 +428,7 @@ export function useTableStore({
     return () => {
       cancelled = true;
     };
-  }, [activeTableId, syncRowsToCellsMap]);
+  }, [activeTableId, disableRowLoad, syncRowsToCellsMap]);
 
   return {
     currentData,

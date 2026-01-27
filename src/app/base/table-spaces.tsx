@@ -28,6 +28,8 @@ type TableSpacesProps = {
   setData?: (data: TableRow[]) => void;
 };
 
+const LARGE_TABLE_THRESHOLD = 500;
+
 export function TableSpaces({ baseId, tableId, table: externalTable, data: externalData, setData: externalSetData }: TableSpacesProps) {
   const params = useParams();
   const currentBaseId = baseId || (params?.id as string);
@@ -54,6 +56,33 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
 
   const backendSync = useTableBackendSync();
 
+  // ✅ Infinite rows source (pagination / lazy loading)
+  // Load this first to get totalCount before deciding whether to disable full load
+  const PAGE_SIZE = 200;
+
+  const {
+    data: infiniteData,
+    isLoading: isLoadingRows,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+  } = api.tableData.loadInfinite.useInfiniteQuery(
+    { tableId: currentTableId, limit: PAGE_SIZE },
+    {
+      enabled: !!currentTableId,
+      getNextPageParam: (lastPage) => lastPage.nextCursor,
+      // 你也可以先关掉 refetchOnWindowFocus，避免录 demo 时抖动
+      refetchOnWindowFocus: false,
+    }
+  );
+
+  // ✅ total row count for UI display (and virtualizer count)
+  const totalCount = infiniteData?.pages?.[0]?.totalCount ?? 0;
+
+  // ✅ Determine if this is a large table (to disable full load in useTableStore)
+  // For large tables, we skip loadData() and rely on loadInfinite() instead
+  const isLargeTable = totalCount > LARGE_TABLE_THRESHOLD;
+
   // 使用统一的 TableStore 管理所有状态
   const {
     currentData,
@@ -68,7 +97,22 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
     activeTableId: currentTableId,
     externalSetData,
     backendSync,
+    disableRowLoad: isLargeTable,
   });
+
+  // ✅ Only the loaded rows are used as table data
+  const flatRows = useMemo(() => {
+    return infiniteData?.pages.flatMap((p) => p.rows) ?? [];
+  }, [infiniteData]);
+
+  // ✅ Get columns from infinite query (preferred) or fallback to store
+  const tableColumns = useMemo(() => {
+    const infiniteColumns = infiniteData?.pages?.[0]?.columns;
+    if (infiniteColumns && infiniteColumns.length > 0) {
+      return infiniteColumns;
+    }
+    return currentTableColumns;
+  }, [infiniteData?.pages, currentTableColumns]);
 
   // 包装 async setData 为同步函数，以兼容 createTableColumns 的接口
   // createTableColumns 期望 onSetData: (data: TableRow[]) => void
@@ -107,21 +151,35 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
     };
   }, [storeUpdateCell]);
 
+  // ✅ Create a getCellValue that reads from flatRows (infinite query data) first, then cellsMap
+  const getCellValueFromRows = useMemo(() => {
+    return (rowId: string, colId: string, colType: "text" | "number") => {
+      // First try to get from flatRows (infinite query data)
+      const row = flatRows.find((r) => r.id === rowId) as { id: string; [key: string]: string | number | null } | undefined;
+      if (row && colId in row) {
+        const value = row[colId];
+        return value ?? (colType === "number" ? null : "");
+      }
+      // Fallback to cellsMap (for edited cells)
+      return getCellValue(rowId, colId, colType);
+    };
+  }, [flatRows, getCellValue]);
+
   const columns = useMemo(
     () =>
       createTableColumns({
-        currentData,
+        currentData: flatRows,
         cellsMap,
-        getCellValue,
+        getCellValue: getCellValueFromRows,
         onSetData: handleSetData,
         onUpdateCell: handleUpdateCell,
-        columns: currentTableColumns,
+        columns: tableColumns,
       }),
-    [currentData, cellsMap, getCellValue, handleSetData, handleUpdateCell, currentTableColumns]
+    [flatRows, cellsMap, getCellValueFromRows, handleSetData, handleUpdateCell, tableColumns]
   );
 
   const table = useReactTable({
-    data: currentData,
+    data: flatRows,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -154,10 +212,22 @@ export function TableSpaces({ baseId, tableId, table: externalTable, data: exter
             activeTable={availableTables.find((t) => t.id === currentTableId) || null}
           />
 
-          <TableGrid key={currentTableId} table={table} onAddRow={handleAddRow} onAddColumn={handleAddColumn} tableId={currentTableId} />
+          <TableGrid 
+            key={currentTableId} 
+            table={table} 
+            onAddRow={handleAddRow} 
+            onAddColumn={handleAddColumn} 
+            tableId={currentTableId}
+            totalCount={totalCount}
+            loadedCount={flatRows.length}
+            fetchNextPage={fetchNextPage}
+            hasNextPage={!!hasNextPage}
+            isFetchingNextPage={isFetchingNextPage}
+            isLoadingRows={isLoadingRows}
+          />
 
-          <TableBottomBar recordCount={currentData.length} onAddRow={handleAddRow} />
-        </div>
+          <TableBottomBar recordCount={totalCount || flatRows.length} onAddRow={handleAddRow} />
+          </div>
       </div>
     </div>
   );
