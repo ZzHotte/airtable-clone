@@ -53,6 +53,19 @@ export function AddColumnModal({ isOpen, onClose, onCreate, position }: AddColum
 
   const selectedType = columnTypes.find((t) => t.value === columnType) ?? columnTypes[0];
 
+  const pad = 16;
+  const modalW = 320;
+  const modalH = 380;
+  const constrained = (() => {
+    if (!position || typeof window === "undefined") return position;
+    let { top, left } = position;
+    if (left + modalW > window.innerWidth - pad) left = window.innerWidth - modalW - pad;
+    if (left < pad) left = pad;
+    if (top + modalH > window.innerHeight - pad) top = window.innerHeight - modalH - pad;
+    if (top < pad) top = pad;
+    return { top, left };
+  })();
+
   return (
     <div
       className="fixed inset-0 z-50"
@@ -64,9 +77,9 @@ export function AddColumnModal({ isOpen, onClose, onCreate, position }: AddColum
         style={{
           boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
           position: "absolute",
-          top: position ? `${position.top}px` : "50%",
-          left: position ? `${position.left}px` : "50%",
-          transform: position ? "none" : "translate(-50%, -50%)",
+          top: constrained ? `${constrained.top}px` : "50%",
+          left: constrained ? `${constrained.left}px` : "50%",
+          transform: constrained ? "none" : "translate(-50%, -50%)",
           maxWidth: "calc(28rem * 2 / 3)",
         }}
         onClick={(e) => e.stopPropagation()}

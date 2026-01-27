@@ -66,9 +66,10 @@ export function useTableBackendSync(): BackendSync {
   const appendRow = useCallback(
     async (tableId: string, rowId: string): Promise<void> => {
       await appendRowMut.mutateAsync({ tableId, rowId });
-      await utils.tableData.loadInfinite.invalidate({ tableId });
+      // Don't invalidate loadInfinite: large tables show new row via appendedRows;
+      // invalidating would refetch same window and double-count.
     },
-    [appendRowMut, utils.tableData.loadInfinite]
+    [appendRowMut]
   );
 
   const prefetchData = useCallback(

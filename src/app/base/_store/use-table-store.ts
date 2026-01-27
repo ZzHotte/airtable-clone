@@ -157,8 +157,12 @@ export function useTableStore({
     [activeTableId, externalSetData, backendSync, currentTableColumns, cellsMapState, disableRowLoad]
   );
 
-  const addRow = useCallback(async () => {
-    if (!activeTableId) return;
+  const addRow = useCallback(async (): Promise<{
+    newRowId: string;
+    newRow: TableRow;
+    cellValues: Record<string, CellValue>;
+  } | null> => {
+    if (!activeTableId) return null;
 
     const newRowId = genRowId();
     const newRow: TableRow = { id: newRowId };
@@ -208,6 +212,8 @@ export function useTableStore({
         console.error("Failed to append new row to backend (large table mode):", error);
       }
     }
+
+    return { newRowId, newRow, cellValues: newRowMap };
   }, [activeTableId, currentData, currentTableColumns, cellsMapState, backendSync, disableRowLoad]);
 
   const updateCell = useCallback(

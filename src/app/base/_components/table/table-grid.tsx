@@ -5,18 +5,24 @@ import { flexRender, type Table } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { TableRow } from "../../_store/use-table-store";
 import { AddColumnButton } from "./add-column-button";
+import { AddNewRow } from "./add-new-row";
 import type { ColumnType } from "./add-column-modal";
 
+type TableRowOrPlaceholder = TableRow & { __placeholder?: true };
+
 type TableGridProps = {
-  table: Table<TableRow>;
+  table: Table<TableRowOrPlaceholder>;
   onAddRow: () => void;
   onAddColumn?: (data: { name: string; type: ColumnType; defaultValue?: string }) => void;
   tableId?: string;
   totalCount: number;
+  effectiveTotalCount?: number;
   isLargeTable?: boolean;
   windowOffset?: number;
   pageSize?: number;
   onWindowOffsetChange?: (offset: number) => void;
+  scrollToRowIndex?: number | null;
+  onScrollToRowHandled?: () => void;
 };
 
 type SelectedCell = {
@@ -30,10 +36,13 @@ export function TableGrid({
   onAddColumn, 
   tableId,
   totalCount,
+  effectiveTotalCount,
   isLargeTable,
   windowOffset = 0,
   pageSize = 200,
   onWindowOffsetChange,
+  scrollToRowIndex,
+  onScrollToRowHandled,
 }: TableGridProps) {
   const [selectedCell, setSelectedCell] = useState<SelectedCell>(null);
   const [editingCell, setEditingCell] = useState<SelectedCell>(null);
@@ -42,55 +51,51 @@ export function TableGrid({
 
   const rowCount = table.getRowModel().rows.length;
   const shouldUseVirtualization = totalCount > 100;
-  
-  // Use totalCount from props (single source of truth)
-  const totalRowCount = totalCount;
+  const totalRowCount = effectiveTotalCount ?? totalCount;
 
   const rowVirtualizer = useVirtualizer({
     count: shouldUseVirtualization ? totalRowCount : 0,
     getScrollElement: () => tableContainerRef.current,
-    estimateSize: () => 24, // Row height
-    overscan: 10, // Render 10 extra rows above and below
+    estimateSize: () => 24,
+    overscan: 10,
     enabled: shouldUseVirtualization,
+
+    onChange: (instance) => {
+      if (!shouldUseVirtualization || !isLargeTable || !onWindowOffsetChange) return;
+
+      const items = instance.getVirtualItems();
+      if (!items.length) return;
+
+      const firstIndex = items[0]!.index;
+      const lastIndex = items[items.length - 1]!.index;
+      const centerIndex = Math.floor((firstIndex + lastIndex) / 2);
+
+      const minLoaded = windowOffset;
+      const maxLoaded = windowOffset + pageSize - 1;
+      const preloadThreshold = 50;
+
+      if (
+        centerIndex < minLoaded + preloadThreshold ||
+        centerIndex > maxLoaded - preloadThreshold
+      ) {
+        const halfPage = Math.floor(pageSize / 2);
+        let nextStart = Math.max(0, centerIndex - halfPage);
+        if (totalCount > 0) {
+          nextStart = Math.min(nextStart, Math.max(0, totalCount - pageSize));
+        }
+
+        if (nextStart !== windowOffset) {
+          onWindowOffsetChange(nextStart);
+        }
+      }
+    },
   });
 
   useEffect(() => {
-    if (!shouldUseVirtualization || !isLargeTable || !onWindowOffsetChange) return;
-
-    const items = rowVirtualizer.getVirtualItems();
-    if (!items.length) return;
-
-    const firstIndex = items[0]!.index;
-    const lastIndex = items[items.length - 1]!.index;
-    const centerIndex = Math.floor((firstIndex + lastIndex) / 2);
-
-    const currentStart = windowOffset;
-
-    // 只有当视窗中心明显跑出当前窗口的中间区域时才切换，避免频繁请求
-    const lowerBound = currentStart + pageSize * 0.25;
-    const upperBound = currentStart + pageSize * 0.75;
-
-    if (centerIndex < lowerBound || centerIndex > upperBound) {
-      const halfPage = Math.floor(pageSize / 2);
-      let nextStart = Math.max(0, centerIndex - halfPage);
-      // 避免超出总行数
-      if (totalRowCount > 0) {
-        nextStart = Math.min(nextStart, Math.max(0, totalRowCount - pageSize));
-      }
-
-      if (nextStart !== currentStart) {
-        onWindowOffsetChange(nextStart);
-      }
-    }
-  }, [
-    shouldUseVirtualization,
-    isLargeTable,
-    onWindowOffsetChange,
-    totalRowCount,
-    windowOffset,
-    pageSize,
-    rowVirtualizer,
-  ]);
+    if (scrollToRowIndex == null || !shouldUseVirtualization) return;
+    rowVirtualizer.scrollToIndex(scrollToRowIndex, { align: "end" });
+    onScrollToRowHandled?.();
+  }, [scrollToRowIndex, shouldUseVirtualization, rowVirtualizer, onScrollToRowHandled]);
 
   const handleCellClick = (rowIndex: number, columnId: string) => {
     const isSameCell = 
@@ -208,13 +213,20 @@ export function TableGrid({
     ? virtualRows.map((vr) => ({ index: vr.index, size: vr.size }))
     : table.getRowModel().rows.map((row, idx) => ({ index: idx, size: 24 }));
 
+  const lastVirtualIndex = virtualRows.length ? virtualRows[virtualRows.length - 1]!.index : -1;
+  const isAtBottom =
+    shouldUseVirtualization &&
+    isLargeTable &&
+    totalRowCount > 0 &&
+    lastVirtualIndex >= totalRowCount - 1;
+
   return (
-    <div 
-      ref={tableContainerRef}
-      className="flex-1 overflow-auto" 
-      style={{ backgroundColor: "#F6F8FC" }}
-      onClick={handleContainerClick}
-    >
+      <div 
+        ref={tableContainerRef}
+        className="flex-1 overflow-auto" 
+        style={{ backgroundColor: "#F6F8FC", scrollbarGutter: "stable" }}
+        onClick={handleContainerClick}
+      >
       <div className="inline-block relative">
         <table className="border-collapse" style={{ tableLayout: "fixed", width: "auto" }}>
           <thead className="bg-white sticky top-0 z-20">
@@ -271,15 +283,13 @@ export function TableGrid({
             ) : (
               rowsToRender.map((rowInfo) => {
                 const rowIndex = rowInfo.index;
-                const logicalIndex = shouldUseVirtualization && isLargeTable
-                  ? rowIndex - windowOffset
-                  : rowIndex;
-                const tableRow = table.getRowModel().rows[logicalIndex];
-                
-                // If row doesn't exist yet (still loading), show placeholder
-                if (!tableRow) {
+                const tableRow = table.getRowModel().rows[rowIndex];
+                const raw = tableRow?.original as TableRowOrPlaceholder | undefined;
+                const isPlaceholder = raw?.__placeholder;
+
+                if (!tableRow || isPlaceholder) {
                   return (
-                    <tr key={`loading-${rowIndex}`} style={{ height: `${rowInfo.size}px` }}>
+                    <tr key={tableRow ? tableRow.id : `loading-${rowIndex}`} style={{ height: `${rowInfo.size}px` }}>
                       {headers.map((header) => (
                         <td
                           key={header.id}
@@ -367,21 +377,7 @@ export function TableGrid({
             {!shouldUseVirtualization && (
               <tr className="border-b border-gray-200 hover:bg-gray-100 cursor-pointer">
                 <td className="px-2 py-1 border-r border-gray-200 cursor-pointer">
-                  <button
-                    type="button"
-                    onClick={onAddRow}
-                    className="w-full min-h-[1.5rem] flex items-center justify-center text-gray-400 transition-colors cursor-pointer"
-                    title="Add new row"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                      <path
-                        d="M8 2v12M2 8h12"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  </button>
+                  <AddNewRow onAddRow={onAddRow} variant="inline" />
                 </td>
                 {headers.slice(1).map((header) => (
                   <td
@@ -395,6 +391,13 @@ export function TableGrid({
         </table>
         {onAddColumn && <AddColumnButton onCreate={onAddColumn} />}
       </div>
+      {isAtBottom && shouldUseVirtualization && isLargeTable && onAddRow && (
+        <AddNewRow
+          onAddRow={onAddRow}
+          variant="sticky"
+          cellWidth={headers[0]?.getSize()}
+        />
+      )}
     </div>
   );
 }
